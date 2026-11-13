@@ -1,0 +1,537 @@
+{
+ "origin": "http://localhost:19000",
+ "exported_at": "2026-11-13T11:25:30.736Z",
+ "notebooks": [
+  {
+   "label": "Execution quality – 11 Nov 2026",
+   "value": "",
+   "notebookViewState": {
+    "cells": [
+     {
+      "id": "19c63f13-3481-4fa6-8559-79672a6526bd",
+      "position": 0,
+      "value": "# Execution quality — session of @day (Wed 11 Nov 2026)\n\nMarkout = signed (venue mid at fill + horizon − fill px), in bps of fill px and in USD (GBP 1.3287, EUR 1.107; NBP pence → GBP). Fills are measured against **their own venue's** quote. Variables: `day`, `event` (gas-rally window, excluded where noted), `mark_window`. Change `day` to rerun for another session; `event` and `mark_window` are specific to 11 Nov.\n\n**What it shows:** 1) In aggregate we are *not* picked off: passive fills earn about +$97k at fill, rising to +$137k at 1m. 2) The exception is **NBP on ICE**: passive fills capture ~0 bps at fill (half-spread is ~0.5 bps), and on NBP strips they come in −1.8 bps *through* the mid. 3) 23 passive fills printed through the touch (NBP/UKPWR/TTF on ICE), costing ~−$17k. 4) The big NBP losses at 5m come from the **09:30–09:55 gas rally** (NBP +8%, TTF +7.5%). That is market direction, not fill quality. 5) **Not execution:** trader_11 manually marked TTF_Q1-27 about €2.5 above market from 08:00 to 08:29. 6) GASOIL is 100% aggressive (−$66k of spread paid).",
+      "type": "markdown",
+      "topHeight": 230,
+      "topResized": true
+     },
+     {
+      "id": "7c31ca28-b73a-4cd1-84f9-7247869a4731",
+      "position": 1,
+      "value": "WITH m AS (\n  SELECT t.ts, t.passive, h.offset AS off,\n         t.qty * ((q.bid + q.ask) / 2 - t.px) * (CASE t.curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'UKA' THEN 1.3287 WHEN 'TTF' THEN 1.107 WHEN 'EUA' THEN 1.107 ELSE 1.0 END) AS usd\n  FROM energy_fills t\n  HORIZON JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\n  LIST (0, 5s, 1m, 5m) AS h\n  WHERE t.ts IN @day\n)\nSELECT CASE WHEN passive THEN 'passive' ELSE 'aggressive' END AS liquidity,\n       CASE WHEN ts IN @event THEN 'gas rally window' ELSE 'rest of day' END AS window_,\n       count() / 4 AS fills,\n       round(sum(CASE WHEN off = 0 THEN usd END)) AS usd_at_fill,\n       round(sum(CASE WHEN off = 5000000000 THEN usd END)) AS usd_5s,\n       round(sum(CASE WHEN off = 60000000000 THEN usd END)) AS usd_1m,\n       round(sum(CASE WHEN off = 300000000000 THEN usd END)) AS usd_5m\nFROM m ORDER BY liquidity, window_ DESC",
+      "name": "Day totals · markout USD by liquidity and window",
+      "topHeight": 392,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "ea8312ea-b255-4537-b80d-1957bd95f501",
+         "enabled": true,
+         "target": {
+          "kind": "allNumeric"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        },
+        {
+         "id": "fca502c5-bd0f-4513-9945-2cd2004b0198",
+         "enabled": true,
+         "target": {
+          "kind": "allNumeric"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataPositive",
+         "condition": {
+          "op": "gt",
+          "value": 0
+         }
+        }
+       ]
+      },
+      "bottomHeight": 190,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "e322d639-0ea1-4d91-9575-0042d9c87a92",
+      "position": 2,
+      "value": "SELECT h.offset / 1000000000 AS horizon_s, t.curve,\n       avg(sign(t.qty) * ((q.bid + q.ask) / 2 - t.px) / t.px * 10000) AS markout_bps\nFROM energy_fills t\nHORIZON JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\nLIST (0, 1s, 5s, 15s, 30s, 1m, 2m, 5m) AS h\nWHERE t.ts IN @day AND t.passive AND NOT (t.ts IN @event)\nORDER BY horizon_s, t.curve",
+      "name": "Passive markout curve by commodity (bps, excl. rally window)",
+      "topHeight": 176,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "horizon_s",
+       "queries": [
+        {
+         "type": "line",
+         "yColumns": [
+          "markout_bps"
+         ],
+         "partitionByColumn": "curve",
+         "name": "passive markout bps"
+        }
+       ]
+      },
+      "bottomHeight": 360,
+      "bottomResized": true
+     },
+     {
+      "id": "57c5a5e3-067a-4b8b-9ea1-6bfb4a6434be",
+      "position": 3,
+      "value": "SELECT ts, close AS NBP_Dec26_mid FROM energy_quotes_1m WHERE ts IN @day AND symbol = 'NBP_Dec-26';\nSELECT ts, close AS TTF_Dec26_mid FROM energy_quotes_1m WHERE ts IN @day AND symbol = 'TTF_Dec-26'",
+      "name": "Gas rally: NBP Dec-26 (p/th, left) vs TTF Dec-26 (€/MWh, right), 1m mid",
+      "topHeight": 72,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "ts",
+       "queries": [
+        {
+         "type": "line",
+         "yColumns": [
+          "NBP_Dec26_mid"
+         ],
+         "name": "NBP Dec-26"
+        },
+        {
+         "type": "line",
+         "yColumns": [
+          "TTF_Dec26_mid"
+         ],
+         "axis": "right",
+         "name": "TTF Dec-26"
+        }
+       ],
+       "rightAxis": {
+        "name": "TTF €/MWh"
+       }
+      },
+      "bottomHeight": 360,
+      "bottomResized": true
+     },
+     {
+      "id": "3151ecb0-6a67-4a07-b2d8-a73ff7a19a00",
+      "position": 4,
+      "value": "SELECT t.curve, t.venue, CASE WHEN t.passive THEN 'passive' ELSE 'aggressive' END AS liquidity,\n       count() / 5 AS fills,\n       round(avg(CASE WHEN h.offset = 0 THEN (q.ask - q.bid) / t.px * 10000 / 2 END), 2) AS half_spread_bps,\n       round(avg(CASE WHEN h.offset = 0 THEN sign(t.qty) * ((q.bid + q.ask) / 2 - t.px) / t.px * 10000 END), 2) AS bps_at_fill,\n       round(avg(CASE WHEN h.offset = 5000000000 THEN sign(t.qty) * ((q.bid + q.ask) / 2 - t.px) / t.px * 10000 END), 2) AS bps_5s,\n       round(avg(CASE WHEN h.offset = 30000000000 THEN sign(t.qty) * ((q.bid + q.ask) / 2 - t.px) / t.px * 10000 END), 2) AS bps_30s,\n       round(avg(CASE WHEN h.offset = 60000000000 THEN sign(t.qty) * ((q.bid + q.ask) / 2 - t.px) / t.px * 10000 END), 2) AS bps_1m,\n       round(sum(CASE WHEN h.offset = 0 THEN t.qty * ((q.bid + q.ask) / 2 - t.px) * (CASE t.curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'UKA' THEN 1.3287 WHEN 'TTF' THEN 1.107 WHEN 'EUA' THEN 1.107 ELSE 1.0 END) END)) AS usd_at_fill,\n       round(sum(CASE WHEN h.offset = 60000000000 THEN t.qty * ((q.bid + q.ask) / 2 - t.px) * (CASE t.curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'UKA' THEN 1.3287 WHEN 'TTF' THEN 1.107 WHEN 'EUA' THEN 1.107 ELSE 1.0 END) END)) AS usd_1m\nFROM energy_fills t\nHORIZON JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\nLIST (0, 5s, 30s, 1m, 5m) AS h\nWHERE t.ts IN @day AND NOT (t.ts IN @event)\nORDER BY liquidity DESC, bps_1m",
+      "name": "Scorecard · commodity × venue × liquidity (excl. rally window)",
+      "topHeight": 344,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "fddf052d-d595-454b-9934-7beaf056fad5",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "usd_1m"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        },
+        {
+         "id": "a7276d95-703b-437c-a220-8fa087f889d2",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "usd_at_fill"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        },
+        {
+         "id": "98f6ad88-ece3-408f-a386-4adb25a1188e",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "bps_1m"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        }
+       ]
+      },
+      "bottomHeight": 620,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "b5b456af-0df4-42d0-a721-ff068b296238",
+      "position": 5,
+      "value": "SELECT t.trader, t.book, t.curve, count() / 3 AS fills,\n       round(avg(CASE WHEN h.offset = 0 THEN sign(t.qty) * ((q.bid + q.ask) / 2 - t.px) / t.px * 10000 END), 2) AS bps_at_fill,\n       round(avg(CASE WHEN h.offset = 30000000000 THEN sign(t.qty) * ((q.bid + q.ask) / 2 - t.px) / t.px * 10000 END), 2) AS bps_30s,\n       round(sum(CASE WHEN h.offset = 0 THEN t.qty * ((q.bid + q.ask) / 2 - t.px) * (CASE t.curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'UKA' THEN 1.3287 WHEN 'TTF' THEN 1.107 WHEN 'EUA' THEN 1.107 ELSE 1.0 END) END)) AS usd_at_fill,\n       round(sum(CASE WHEN h.offset = 30000000000 THEN t.qty * ((q.bid + q.ask) / 2 - t.px) * (CASE t.curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'UKA' THEN 1.3287 WHEN 'TTF' THEN 1.107 WHEN 'EUA' THEN 1.107 ELSE 1.0 END) END)) AS usd_30s\nFROM energy_fills t\nHORIZON JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\nLIST (0, 30s, 1m) AS h\nWHERE t.ts IN @day AND t.passive AND NOT (t.ts IN @event)\nORDER BY usd_30s\nLIMIT 15",
+      "name": "Who · passive fills by trader and commodity (excl. rally window)",
+      "topHeight": 272,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "3c8669bf-ff17-48bd-90f2-c0718c7ac92c",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "usd_30s"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        },
+        {
+         "id": "4f128a4d-7632-4a02-8def-65c6b1646487",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "bps_at_fill"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        }
+       ]
+      },
+      "bottomHeight": 480,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "ec709cff-9381-4f30-9008-12bad8d68f7a",
+      "position": 6,
+      "value": "SELECT t.ts, t.trader, t.symbol, t.venue, t.qty, t.px, q.bid, q.ask,\n       round(sign(t.qty) * ((q.bid + q.ask) / 2 - t.px) / t.px * 10000, 2) AS bps_vs_mid,\n       round(t.qty * ((q.bid + q.ask) / 2 - t.px) * (CASE t.curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'UKA' THEN 1.3287 WHEN 'TTF' THEN 1.107 WHEN 'EUA' THEN 1.107 ELSE 1.0 END)) AS usd_vs_mid\nFROM energy_fills t\nASOF JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\nWHERE t.ts IN @day AND t.passive\n  AND ((t.qty > 0 AND t.px > q.ask) OR (t.qty < 0 AND t.px < q.bid))\nORDER BY usd_vs_mid",
+      "name": "Pick-off log · passive fills printed through the touch",
+      "topHeight": 200,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "dc6ea38c-3d20-4652-ad86-dcc2e917bb3b",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "usd_vs_mid"
+         },
+         "kind": "steps",
+         "appliesTo": "cell",
+         "display": "always",
+         "steps": [
+          {
+           "id": "921bc375-7810-4e25-8a8d-a74b69d44f33",
+           "from": -2000,
+           "color": "dataSeries3"
+          },
+          {
+           "id": "b503e2c3-8b6c-449b-b25d-badac6a03399",
+           "from": -500,
+           "color": "dataSeries10"
+          }
+         ],
+         "baseColor": "dataNegative"
+        }
+       ]
+      },
+      "bottomHeight": 480,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "0c53e1c1-8f27-441f-b1dd-b567881d038c",
+      "position": 7,
+      "value": "SELECT t.curve,\n       CASE WHEN t.symbol ~ '_(Q[1-4]|Sum|Win|Cal)-' THEN 'strip' ELSE 'month' END AS tenor,\n       CASE WHEN t.passive THEN 'passive' ELSE 'aggressive' END AS liquidity,\n       count() / 2 AS fills,\n       round(avg(CASE WHEN h.offset = 0 THEN (q.ask - q.bid) / t.px * 10000 / 2 END), 2) AS half_spread_bps,\n       round(avg(CASE WHEN h.offset = 0 THEN sign(t.qty) * ((q.bid + q.ask) / 2 - t.px) / t.px * 10000 END), 2) AS bps_at_fill,\n       round(avg(CASE WHEN h.offset = 30000000000 THEN sign(t.qty) * ((q.bid + q.ask) / 2 - t.px) / t.px * 10000 END), 2) AS bps_30s\nFROM energy_fills t\nHORIZON JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\nLIST (0, 30s) AS h\nWHERE t.ts IN @day AND NOT (t.ts IN @event) AND t.curve IN ('NBP', 'TTF', 'UKPWR')\nORDER BY t.curve, tenor, liquidity",
+      "name": "Strips vs months · passive capture vs half-spread (excl. rally window)",
+      "topHeight": 296,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "483a3f88-92b2-4ec1-9aec-f3966268ea4b",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "bps_at_fill"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        }
+       ]
+      },
+      "bottomHeight": 400,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "d4de6f6c-2052-4b4c-b4f7-2ef3e177f875",
+      "position": 8,
+      "value": "SELECT t.ts, t.trader, t.book, t.symbol, t.passive, t.qty, t.px,\n       round(sign(t.qty) * ((q.bid + q.ask) / 2 - t.px) / t.px * 10000, 1) AS bps_5m,\n       round(t.qty * ((q.bid + q.ask) / 2 - t.px) * (CASE t.curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'TTF' THEN 1.107 ELSE 1.0 END)) AS usd_5m\nFROM energy_fills t\nHORIZON JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\nLIST (5m) AS h\nWHERE t.ts IN @event AND t.curve IN ('NBP', 'TTF', 'UKPWR')\nORDER BY t.ts",
+      "name": "Rally window · NBP/TTF/UKPWR fills and 5m markout",
+      "topHeight": 200,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "9adbca40-0323-498d-974f-5dc0b856b78e",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "usd_5m"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        },
+        {
+         "id": "8f5a2aea-04eb-462c-917d-f7d061e88e1e",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "usd_5m"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataPositive",
+         "condition": {
+          "op": "gt",
+          "value": 0
+         }
+        }
+       ]
+      },
+      "bottomHeight": 400,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "f8c23bb8-e58d-4781-9a40-9efab5027399",
+      "position": 9,
+      "value": "SELECT ts, price AS curve_mark FROM energy_curve_marks WHERE ts IN @mark_window AND symbol = 'TTF_Q1-27' AND version = 1;\nSELECT ts, close AS market_mid FROM energy_quotes_1m WHERE ts IN @mark_window AND symbol = 'TTF_Q1-27'",
+      "name": "Not execution: TTF_Q1-27 curve mark vs market mid (manual override 08:00–08:29)",
+      "topHeight": 72,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "ts",
+       "queries": [
+        {
+         "type": "stepLine",
+         "yColumns": [
+          "curve_mark"
+         ],
+         "name": "Curve mark"
+        },
+        {
+         "type": "line",
+         "yColumns": [
+          "market_mid"
+         ],
+         "name": "ICE Endex mid"
+        }
+       ]
+      },
+      "bottomHeight": 340,
+      "bottomResized": true
+     },
+     {
+      "id": "7ace3b8e-d285-4207-97c8-b2d7232073b7",
+      "position": 10,
+      "value": "SELECT k.symbol, k.source, k.marked_by, min(k.ts) AS first_mark, max(k.ts) AS last_mark, count() AS minutes,\n       round(avg(k.price - m.close), 3) AS avg_mark_minus_mid\nFROM energy_curve_marks k\nASOF JOIN energy_quotes_1m m ON (symbol)\nWHERE k.ts IN @day AND k.version = 1 AND k.source NOT IN ('MARKET', 'INTERP')\nGROUP BY k.symbol, k.source, k.marked_by",
+      "name": "Manual / non-market marks on the day",
+      "topHeight": 152,
+      "paneView": "result",
+      "bottomHeight": 160,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "17a2b9e1-10f4-4a81-bdf6-50d432881a6c",
+      "position": 11,
+      "value": "SELECT t.curve, count() AS fills,\n       round(100.0 * sum(CASE WHEN t.passive THEN 1 ELSE 0 END) / count(), 1) AS passive_pct,\n       round(sum(CASE WHEN NOT t.passive THEN t.qty * ((q.bid + q.ask) / 2 - t.px) * (CASE t.curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'UKA' THEN 1.3287 WHEN 'TTF' THEN 1.107 WHEN 'EUA' THEN 1.107 ELSE 1.0 END) END)) AS aggressive_usd_at_fill\nFROM energy_fills t\nASOF JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\nWHERE t.ts IN @day\nORDER BY aggressive_usd_at_fill",
+      "name": "Liquidity mix · passive share and spread paid by commodity",
+      "topHeight": 176,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "b19ad3cf-a7c8-4ac5-953d-5c946b435055",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "passive_pct"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 10
+         }
+        }
+       ]
+      },
+      "bottomHeight": 340,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     }
+    ],
+    "settings": {
+     "layoutMode": "grid",
+     "layout": [
+      {
+       "i": "19c63f13-3481-4fa6-8559-79672a6526bd",
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 10
+      },
+      {
+       "i": "7c31ca28-b73a-4cd1-84f9-7247869a4731",
+       "x": 0,
+       "y": 1,
+       "w": 12,
+       "h": 16
+      },
+      {
+       "i": "e322d639-0ea1-4d91-9575-0042d9c87a92",
+       "x": 0,
+       "y": 2,
+       "w": 6,
+       "h": 15
+      },
+      {
+       "i": "57c5a5e3-067a-4b8b-9ea1-6bfb4a6434be",
+       "x": 6,
+       "y": 2,
+       "w": 6,
+       "h": 15
+      },
+      {
+       "i": "3151ecb0-6a67-4a07-b2d8-a73ff7a19a00",
+       "x": 0,
+       "y": 3,
+       "w": 12,
+       "h": 14
+      },
+      {
+       "i": "b5b456af-0df4-42d0-a721-ff068b296238",
+       "x": 0,
+       "y": 4,
+       "w": 6,
+       "h": 12
+      },
+      {
+       "i": "ec709cff-9381-4f30-9008-12bad8d68f7a",
+       "x": 6,
+       "y": 4,
+       "w": 6,
+       "h": 9
+      },
+      {
+       "i": "0c53e1c1-8f27-441f-b1dd-b567881d038c",
+       "x": 0,
+       "y": 5,
+       "w": 6,
+       "h": 12
+      },
+      {
+       "i": "d4de6f6c-2052-4b4c-b4f7-2ef3e177f875",
+       "x": 6,
+       "y": 5,
+       "w": 6,
+       "h": 9
+      },
+      {
+       "i": "f8c23bb8-e58d-4781-9a40-9efab5027399",
+       "x": 0,
+       "y": 6,
+       "w": 6,
+       "h": 14
+      },
+      {
+       "i": "7ace3b8e-d285-4207-97c8-b2d7232073b7",
+       "x": 6,
+       "y": 6,
+       "w": 6,
+       "h": 7
+      },
+      {
+       "i": "17a2b9e1-10f4-4a81-bdf6-50d432881a6c",
+       "x": 6,
+       "y": 7,
+       "w": 6,
+       "h": 8
+      }
+     ],
+     "autoRefreshDefault": false,
+     "variables": [
+      {
+       "name": "day",
+       "value": "'2026-11-11'"
+      },
+      {
+       "name": "event",
+       "value": "'2026-11-11T09:25;40m'"
+      },
+      {
+       "name": "mark_window",
+       "value": "'2026-11-11T07:30;90m'"
+      }
+     ]
+    }
+   },
+   "position": 1,
+   "id": 2
+  }
+ ]
+}

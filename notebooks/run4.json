@@ -1,0 +1,427 @@
+{
+ "origin": "http://eval4.localhost:19000",
+ "exported_at": "2026-11-13T11:25:33.564Z",
+ "notebooks": [
+  {
+   "label": "Execution quality – daily TCA",
+   "value": "",
+   "notebookViewState": {
+    "cells": [
+     {
+      "id": "1114c95c-f85f-4142-8de8-ce6a4811a0b3",
+      "position": 0,
+      "value": "## Execution quality: daily TCA (exchange fills + OTC/broker)\n\n**To reuse:** open *Variables* and set `day` (session to review, e.g. `'2026-11-12'`), `prev` (comparison day) and `event` (a TICK window around any market shock found in *Market context* / *Big 5-minute moves*, e.g. `'2026-11-12T14:00;30m'`). The OTC/broker counterparty cell can't take notebook variables, so edit `@otc_day` in its SQL too.\n\n**Conventions.** Markout = signed move of the **same venue's** mid after the fill, in bps (positive = good for us). `at fill` = spread captured or paid (aggressive should be about −½ spread, passive about +½ spread). *Picked off* shows up as passive fills whose markout turns negative within seconds to minutes. USD = local P&L × `px_factor` × the day's average EURUSD/GBPUSD.\n\n**Findings for 11 Nov 2026:** no systematic pick-off. Aggressive fills paid about ½ spread and passive fills earned about ½ spread on every venue, with no adverse drift out to 5 minutes. The big negative markouts are the **09:30–09:50 gas/power rally** (NBP, TTF, JKM, UKPWR +6–7%; oil and carbon flat), which hit whoever was short, not one counterparty. Data issues: **EEX quote-feed gap of 181 s (08:45–08:48)**; booking problems (JKM 500k→50k quantity typo, duplicate BANK_02 TTF_Q1 ticket, 34 OTC/broker trades booked the next morning).",
+      "name": "Read me",
+      "type": "markdown",
+      "topHeight": 230,
+      "topResized": true
+     },
+     {
+      "id": "8cdc7401-3c4c-423c-825c-ac9fa9497afd",
+      "position": 1,
+      "value": "SELECT h.offset/1000000000 AS horizon_s, concat(f.venue, CASE WHEN f.passive THEN ' passive' ELSE ' aggressive' END) AS segment,\n avg(sign(f.qty)*((q.bid+q.ask)/2 - f.px)/((q.bid+q.ask)/2)*10000) AS markout_bps\nFROM (energy_fills WHERE ts IN @day) f\nHORIZON JOIN energy_quotes q ON (f.symbol = q.symbol AND f.venue = q.source)\nLIST (0, 1s, 5s, 10s, 30s, 1m, 2m, 5m) AS h\nGROUP BY horizon_s, segment ORDER BY horizon_s, segment",
+      "name": "Markout curve by venue × liquidity (bps, + = good for us)",
+      "topHeight": 152,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "horizon_s",
+       "queries": [
+        {
+         "type": "line",
+         "yColumns": [
+          "markout_bps"
+         ],
+         "partitionByColumn": "segment",
+         "name": "Markout bps"
+        }
+       ]
+      },
+      "bottomHeight": 360,
+      "bottomResized": true
+     },
+     {
+      "id": "561e1a3a-eff3-4c5d-bf1a-2807f7f9e3f8",
+      "position": 2,
+      "value": "WITH b AS (SELECT ts, symbol, last((bid+ask)/2) AS mid FROM energy_quotes WHERE ts IN @day AND source IN ('ICE','ICE_ENDEX','CME') AND symbol IN ('NBP_Jan-27','TTF_Jan-27','UKPWR_Jan-27','JKM_Jan-27','BRENT_Jan-27','WTI_Jan-27','GASOIL_Jan-27','EUA_Dec-26','UKA_Dec-26') SAMPLE BY 5m)\nSELECT ts, symbol, round(100 * mid / first_value(mid) OVER (PARTITION BY symbol ORDER BY ts), 3) AS idx FROM b ORDER BY ts",
+      "name": "Market context: front months indexed to 100 (5m)",
+      "topHeight": 72,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "ts",
+       "queries": [
+        {
+         "type": "line",
+         "yColumns": [
+          "idx"
+         ],
+         "partitionByColumn": "symbol",
+         "name": "Index"
+        }
+       ]
+      },
+      "bottomHeight": 360,
+      "bottomResized": true
+     },
+     {
+      "id": "4f38b83c-562c-4548-9233-32e41e496e58",
+      "position": 3,
+      "value": "WITH m AS (\n SELECT CASE WHEN f.ts IN @day THEN 'day' ELSE 'prev' END AS d, f.curve, f.passive, h.offset/1000000000 AS s,\n   sign(f.qty)*((q.bid+q.ask)/2 - f.px)/((q.bid+q.ask)/2)*10000 AS bps, (q.ask-q.bid)/((q.bid+q.ask)/2)*10000 AS spr\n FROM (energy_fills WHERE ts IN @day OR ts IN @prev) f\n HORIZON JOIN energy_quotes q ON (f.symbol = q.symbol AND f.venue = q.source)\n LIST (0, 10s, 1m, 5m) AS h)\nSELECT curve, CASE WHEN passive THEN 'passive' ELSE 'aggressive' END AS liquidity,\n sum(CASE WHEN d='day' AND s=0 THEN 1 ELSE 0 END) AS fills,\n round(avg(CASE WHEN d='day' AND s=0 THEN spr END), 2) AS spread_bps,\n round(avg(CASE WHEN d='day' AND s=0 THEN bps END), 2) AS at_fill_bps,\n round(avg(CASE WHEN d='day' AND s=10 THEN bps END), 2) AS m10s_bps,\n round(avg(CASE WHEN d='day' AND s=60 THEN bps END), 2) AS m1m_bps,\n round(avg(CASE WHEN d='day' AND s=300 THEN bps END), 2) AS m5m_bps,\n round(avg(CASE WHEN d='prev' AND s=0 THEN bps END), 2) AS prev_at_fill_bps,\n round(avg(CASE WHEN d='prev' AND s=300 THEN bps END), 2) AS prev_m5m_bps\nFROM m GROUP BY curve, liquidity ORDER BY curve, liquidity",
+      "name": "Curve × liquidity scorecard (bps) vs previous day",
+      "topHeight": 392,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "a9bb6f09-5109-4e24-a2c0-adbfe43a9512",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "m5m_bps"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": -2
+         }
+        },
+        {
+         "id": "cb0648c3-566d-4fd9-9664-a061a06b59bb",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "m1m_bps"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": -2
+         }
+        }
+       ]
+      },
+      "bottomHeight": 420,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "53cba4ce-4c43-44fd-9990-89270231a98c",
+      "position": 4,
+      "value": "WITH m AS (\n SELECT f.trader, f.book, f.curve, CASE WHEN f.ts IN @event THEN 1 ELSE 0 END AS in_event, h.offset/1000000000 AS s,\n   f.qty*((q.bid+q.ask)/2 - f.px) AS pnl_local\n FROM (energy_fills WHERE ts IN @day) f\n HORIZON JOIN energy_quotes q ON (f.symbol = q.symbol AND f.venue = q.source)\n LIST (0, 1m, 5m, 30m) AS h),\nagg AS (SELECT trader, book, curve, count()/4 AS fills,\n   sum(CASE WHEN s=0 THEN pnl_local END) AS l0, sum(CASE WHEN s=60 THEN pnl_local END) AS l1m,\n   sum(CASE WHEN s=300 THEN pnl_local END) AS l5m, sum(CASE WHEN s=300 AND in_event=0 THEN pnl_local END) AS l5m_ex,\n   sum(CASE WHEN s=1800 THEN pnl_local END) AS l30m\n FROM m GROUP BY trader, book, curve),\ninst AS (SELECT DISTINCT curve, px_factor, fx_symbol FROM energy_instruments),\nfx AS (SELECT symbol, avg((bid+ask)/2) AS usd FROM energy_quotes WHERE ts IN @day AND symbol IN ('EURUSD','GBPUSD') GROUP BY symbol),\nu AS (SELECT a.*, i.px_factor * coalesce(x.usd, 1.0) AS k FROM agg a JOIN inst i ON a.curve = i.curve LEFT JOIN fx x ON i.fx_symbol = x.symbol)\nSELECT trader, book, sum(fills) AS fills, round(sum(l0*k)) AS usd_at_fill, round(sum(l1m*k)) AS usd_1m, round(sum(l5m*k)) AS usd_5m, round(sum(l5m_ex*k)) AS usd_5m_ex_event, round(sum(l30m*k)) AS usd_30m\nFROM u GROUP BY trader, book ORDER BY usd_5m",
+      "name": "Trader scorecard: markout P&L in USD (ex-event = excluding @event window)",
+      "topHeight": 392,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "e9c22228-2bd5-4b73-b069-e5aa37acac3e",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "usd_5m"
+         },
+         "kind": "steps",
+         "appliesTo": "cell",
+         "display": "always",
+         "steps": [
+          {
+           "id": "06234364-e7cd-4807-8a5a-d6ab9ae07cd7",
+           "from": -25000,
+           "color": "dataSeries3"
+          },
+          {
+           "id": "d100de6c-9465-4953-9850-114a4146ec3f",
+           "from": 0,
+           "color": "dataSeries2"
+          }
+         ],
+         "baseColor": "dataNegative"
+        },
+        {
+         "id": "2e117477-3e9a-41cf-8c45-0a5ee1a8e820",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "usd_5m_ex_event"
+         },
+         "kind": "steps",
+         "appliesTo": "cell",
+         "display": "always",
+         "steps": [
+          {
+           "id": "81ac0530-8ebb-448a-bcd7-86537cfaf62e",
+           "from": -25000,
+           "color": "dataSeries3"
+          },
+          {
+           "id": "f1f940a6-6bb0-4d03-a9d4-857aa1aaa752",
+           "from": 0,
+           "color": "dataSeries2"
+          }
+         ],
+         "baseColor": "dataNegative"
+        }
+       ]
+      },
+      "bottomHeight": 520,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "2d8e5488-d08a-42df-bf8a-4c5241182b0a",
+      "position": 5,
+      "value": "WITH b AS (SELECT ts, symbol, last((bid+ask)/2) AS c FROM energy_quotes WHERE ts IN @day AND source IN ('ICE','ICE_ENDEX','CME') AND symbol IN ('NBP_Jan-27','TTF_Jan-27','BRENT_Jan-27','WTI_Jan-27','UKPWR_Jan-27','EUA_Dec-26','UKA_Dec-26','JKM_Jan-27','GASOIL_Jan-27') SAMPLE BY 5m),\nr AS (SELECT ts, symbol, c, (c / lag(c) OVER (PARTITION BY symbol ORDER BY ts) - 1)*100 AS pct FROM b)\nSELECT ts, symbol, c AS mid, round(pct, 2) AS ret_pct FROM r WHERE abs(pct) > 0.6 ORDER BY ts",
+      "name": "Big 5-minute moves (front months, |ret| > 0.6%)",
+      "topHeight": 80,
+      "paneView": "result",
+      "bottomHeight": 360,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "59c10b7f-e711-4595-800e-75bdfcc31d4a",
+      "position": 6,
+      "value": "WITH m AS (\n SELECT f.ts, f.trader, f.symbol, f.venue, f.passive, f.qty, f.px, h.offset/1000000000 AS s,\n   sign(f.qty)*((q.bid+q.ask)/2 - f.px)/((q.bid+q.ask)/2)*10000 AS bps\n FROM (energy_fills WHERE ts IN @event) f\n HORIZON JOIN energy_quotes q ON (f.symbol = q.symbol AND f.venue = q.source)\n LIST (0, 1m, 5m, 30m) AS h)\nSELECT ts, trader, symbol, venue, passive, qty, px,\n round(avg(CASE WHEN s=0 THEN bps END), 1) AS at_fill, round(avg(CASE WHEN s=60 THEN bps END), 1) AS m1m,\n round(avg(CASE WHEN s=300 THEN bps END), 1) AS m5m, round(avg(CASE WHEN s=1800 THEN bps END), 1) AS m30m\nFROM m GROUP BY ts, trader, symbol, venue, passive, qty, px ORDER BY ts",
+      "name": "Fills inside @event window (bps markouts, + = good)",
+      "topHeight": 248,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "8716602b-2f0a-431e-85ea-85bebcfe96a7",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "m5m"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": -20
+         }
+        },
+        {
+         "id": "eef1064b-ad0a-4fbb-8945-945c74149d8d",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "m5m"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataPositive",
+         "condition": {
+          "op": "gt",
+          "value": 20
+         }
+        }
+       ]
+      },
+      "bottomHeight": 360,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "ff13dc93-347a-4dd5-95fb-02cb1b500c15",
+      "position": 7,
+      "value": "WITH s AS (SELECT ts, source, count() AS n FROM energy_quotes WHERE ts IN @day AND source != 'FX_FEED' SAMPLE BY 1s),\ng AS (SELECT source, ts, ts - lag(ts) OVER (PARTITION BY source ORDER BY ts) AS gap FROM s)\nSELECT source, ts AS resumed_at, gap / 1000000000.0 AS gap_s FROM g WHERE gap > 5000000000 ORDER BY gap_s DESC",
+      "name": "Quote-feed gaps > 5 s (data issue, not execution)",
+      "topHeight": 80,
+      "paneView": "result",
+      "bottomHeight": 200,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "29e31aee-d7d1-4236-807d-0c32649727f8",
+      "position": 8,
+      "value": "SELECT channel, count() AS trades,\n sum(CASE WHEN booked_ts >= dateadd('d', 1, timestamp_floor('d', trade_ts)) THEN 1 ELSE 0 END) AS booked_next_day,\n round(avg(datediff('m', trade_ts, booked_ts))) AS avg_delay_min, max(datediff('m', trade_ts, booked_ts)) AS max_delay_min\nFROM energy_trade_events WHERE trade_ts IN @day AND version = 1 GROUP BY channel ORDER BY channel",
+      "name": "Booking timeliness by channel",
+      "topHeight": 104,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "eae5e8ae-7ae2-4bc9-906c-e9a87b813c7c",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "booked_next_day"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataSeries3",
+         "condition": {
+          "op": "gt",
+          "value": 0
+         }
+        }
+       ]
+      },
+      "bottomHeight": 200,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "9129396d-dcf1-4027-ab7c-90101da3eae5",
+      "position": 9,
+      "value": "-- NOTE: the console cannot inject notebook variables into this cell (re-timestamped subquery), so edit the date here too.\nDECLARE @otc_day := '2026-11-11'\nWITH otc_trades AS (\n  SELECT * FROM (SELECT trade_ts, symbol, qty, px, channel, counterparty FROM energy_trade_events\n  WHERE trade_ts IN @otc_day AND channel != 'EXCH' AND version = 1 AND status = 'NEW' ORDER BY trade_ts) timestamp(trade_ts)\n),\nmk AS (SELECT split_part(o.counterparty, '_', 1) AS cpty_type, o.channel, hz.offset/1000000 AS s,\n   sign(o.qty)*((q.bid+q.ask)/2 - o.px)/((q.bid+q.ask)/2)*10000 AS bps\n FROM otc_trades o HORIZON JOIN (energy_quotes WHERE source IN ('ICE','ICE_ENDEX','CME')) q ON (o.symbol = q.symbol)\n LIST (0, 1m, 5m, 30m) AS hz)\nSELECT cpty_type, channel, count()/4 AS trades, round(avg(CASE WHEN s=0 THEN bps END), 2) AS at_trade_bps, round(avg(CASE WHEN s=60 THEN bps END), 2) AS m1m_bps,\n round(avg(CASE WHEN s=300 THEN bps END), 2) AS m5m_bps, round(avg(CASE WHEN s=1800 THEN bps END), 2) AS m30m_bps\nFROM mk GROUP BY cpty_type, channel ORDER BY m5m_bps",
+      "name": "OTC/broker by counterparty type, bps vs primary mid (date set in SQL: @otc_day)",
+      "topHeight": 320,
+      "paneView": "result",
+      "bottomHeight": 200,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "d5ced8ed-66ab-4a44-b198-a87bb99b3910",
+      "position": 10,
+      "value": "SELECT e.trade_ts, e.booked_ts, e.version, e.status, e.reason, e.channel, e.counterparty, e.trader, e.book, e.symbol, e.qty, e.px, e.trade_id\nFROM energy_trade_events e\nJOIN (SELECT DISTINCT trade_id FROM energy_trade_events WHERE trade_ts IN @day AND version > 1) x ON e.trade_id = x.trade_id\nORDER BY e.trade_id, e.version, e.booked_ts",
+      "name": "Amended / cancelled tickets (all versions)",
+      "topHeight": 104,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "39c11e7b-8deb-42ba-b864-4b56dc7a39bd",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "status"
+         },
+         "kind": "value",
+         "appliesTo": "row",
+         "display": "always",
+         "color": "dataSeries3",
+         "condition": {
+          "op": "eq",
+          "value": "CANCELLED"
+         }
+        }
+       ]
+      },
+      "bottomHeight": 360,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     }
+    ],
+    "settings": {
+     "layoutMode": "grid",
+     "layout": [
+      {
+       "i": "1114c95c-f85f-4142-8de8-ce6a4811a0b3",
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 10
+      },
+      {
+       "i": "8cdc7401-3c4c-423c-825c-ac9fa9497afd",
+       "x": 0,
+       "y": 1,
+       "w": 6,
+       "h": 15
+      },
+      {
+       "i": "561e1a3a-eff3-4c5d-bf1a-2807f7f9e3f8",
+       "x": 6,
+       "y": 1,
+       "w": 6,
+       "h": 15
+      },
+      {
+       "i": "4f38b83c-562c-4548-9233-32e41e496e58",
+       "x": 0,
+       "y": 2,
+       "w": 12,
+       "h": 16
+      },
+      {
+       "i": "53cba4ce-4c43-44fd-9990-89270231a98c",
+       "x": 0,
+       "y": 3,
+       "w": 12,
+       "h": 16
+      },
+      {
+       "i": "2d8e5488-d08a-42df-bf8a-4c5241182b0a",
+       "x": 0,
+       "y": 4,
+       "w": 5,
+       "h": 5
+      },
+      {
+       "i": "59c10b7f-e711-4595-800e-75bdfcc31d4a",
+       "x": 5,
+       "y": 4,
+       "w": 7,
+       "h": 11
+      },
+      {
+       "i": "ff13dc93-347a-4dd5-95fb-02cb1b500c15",
+       "x": 0,
+       "y": 5,
+       "w": 4,
+       "h": 5
+      },
+      {
+       "i": "29e31aee-d7d1-4236-807d-0c32649727f8",
+       "x": 4,
+       "y": 5,
+       "w": 4,
+       "h": 6
+      },
+      {
+       "i": "9129396d-dcf1-4027-ab7c-90101da3eae5",
+       "x": 8,
+       "y": 5,
+       "w": 4,
+       "h": 9
+      },
+      {
+       "i": "d5ced8ed-66ab-4a44-b198-a87bb99b3910",
+       "x": 0,
+       "y": 6,
+       "w": 12,
+       "h": 6
+      }
+     ],
+     "autoRefreshDefault": false,
+     "variables": [
+      {
+       "name": "day",
+       "value": "'2026-11-11'"
+      },
+      {
+       "name": "prev",
+       "value": "'2026-11-10'"
+      },
+      {
+       "name": "event",
+       "value": "'2026-11-11T09:25;30m'"
+      }
+     ]
+    }
+   },
+   "position": 1,
+   "id": 2
+  }
+ ]
+}

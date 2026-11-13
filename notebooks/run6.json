@@ -1,0 +1,433 @@
+{
+ "origin": "http://eval6.localhost:19000",
+ "exported_at": "2026-11-13T11:25:52.201Z",
+ "notebooks": [
+  {
+   "label": "Execution quality – TCA 11 Nov 2026",
+   "value": "",
+   "notebookViewState": {
+    "cells": [
+     {
+      "id": "bcd948e3-1fee-4753-ad6e-988858c8f74c",
+      "position": 0,
+      "value": "# Execution quality: session of 11 Nov 2026\nVariables: `@day` (TICK string; change it to `'$yesterday'` to make the dashboard roll forward each day), `@compare_days` (the day being reviewed plus the day before it), `@gbp` / `@eur` (USD conversion; 11 Nov averages from FX_FEED).\n\n**Markout convention:** signed by side, in bps of the fill price, against the same venue's mid. A positive number means the market moved in our favour. *Drift-neutral* means the average of the buy-side and sell-side markouts, so the day's trend cancels out. Strips (Q/Sum/Win/Cal) are excluded where noted, because their screen quotes are often stale and make a poor benchmark.\n\n**Headline:** only one book/curve combination is being picked off: **EU_GAS resting orders in ICE NBP months**. They lose about 2 bps within 60 s (about −$17k on 11 Nov), and the same pattern shows on 10 Nov. Every other book/curve keeps its spread or better. The lower panels show the items that look bad but are not execution problems.",
+      "name": "Read me",
+      "type": "markdown",
+      "topHeight": 200,
+      "topResized": true
+     },
+     {
+      "id": "8c67617e-4072-40cf-ad6c-31d54df06227",
+      "position": 1,
+      "value": "SELECT h.offset/1_000_000_000 AS horizon_sec, t.venue || CASE WHEN t.passive THEN ' passive' ELSE ' aggressive' END AS segment,\n avg(CASE WHEN t.qty>0 THEN (q.bid+q.ask)/2 - t.px ELSE t.px - (q.bid+q.ask)/2 END / t.px * 10000) AS markout_bps\nFROM energy_fills t HORIZON JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\nLIST (-60s, -10s, 0, 1s, 10s, 30s, 60s, 120s, 300s) AS h\nWHERE t.ts IN @day\nORDER BY segment, horizon_sec",
+      "name": "Markout curve by venue & aggressor (bps, vs venue mid)",
+      "topHeight": 152,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "horizon_sec",
+       "queries": [
+        {
+         "type": "line",
+         "yColumns": [
+          "markout_bps"
+         ],
+         "partitionByColumn": "segment",
+         "name": "Markout"
+        }
+       ]
+      },
+      "bottomHeight": 360,
+      "bottomResized": true
+     },
+     {
+      "id": "e3a4805d-e121-43ee-8b37-37dc3f7b86f2",
+      "position": 2,
+      "value": "WITH m AS (\n  SELECT t.curve, t.qty > 0 AS is_buy, h.offset/1_000_000_000 AS horizon_sec,\n    avg(CASE WHEN t.qty>0 THEN (q.bid+q.ask)/2 - t.px ELSE t.px - (q.bid+q.ask)/2 END / t.px * 10000) AS mk\n  FROM energy_fills t HORIZON JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\n  LIST (0, 1s, 10s, 30s, 60s, 120s, 300s) AS h\n  WHERE t.ts IN @day AND t.passive AND NOT t.symbol ~ '_(Q[1-4]|Sum|Win|Cal)-'\n)\nSELECT horizon_sec, curve, avg(mk) AS drift_neutral_bps FROM m GROUP BY horizon_sec, curve ORDER BY curve, horizon_sec",
+      "name": "Passive fills: drift-neutral markout by curve (bps)",
+      "topHeight": 200,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "horizon_sec",
+       "queries": [
+        {
+         "type": "line",
+         "yColumns": [
+          "drift_neutral_bps"
+         ],
+         "partitionByColumn": "curve",
+         "name": "Drift-neutral markout"
+        }
+       ]
+      },
+      "bottomHeight": 360,
+      "bottomResized": true
+     },
+     {
+      "id": "0a536252-a4ec-401e-a3fd-e67408febbb8",
+      "position": 3,
+      "value": "WITH m AS (\n  SELECT t.book, t.curve, t.qty > 0 AS is_buy, h.offset/1_000_000_000 AS horizon_sec, count() AS n,\n    avg(CASE WHEN t.qty>0 THEN (q.bid+q.ask)/2 - t.px ELSE t.px - (q.bid+q.ask)/2 END / t.px * 10000) AS mk,\n    avg((q.ask-q.bid)/((q.ask+q.bid)/2)*10000)/2 AS hsb\n  FROM energy_fills t HORIZON JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\n  LIST (0, 60s, 300s) AS h\n  WHERE t.ts IN @day AND t.passive AND NOT t.symbol ~ '_(Q[1-4]|Sum|Win|Cal)-'\n)\nSELECT book, curve, sum(CASE WHEN horizon_sec = 0 THEN n END) AS fills,\n  avg(CASE WHEN horizon_sec = 0 THEN hsb END) AS half_spread_bps,\n  avg(CASE WHEN horizon_sec = 0 THEN mk END) AS at_fill_bps,\n  avg(CASE WHEN horizon_sec = 60 THEN mk END) AS mk_60s_bps,\n  avg(CASE WHEN horizon_sec = 300 THEN mk END) AS mk_5m_bps\nFROM m GROUP BY book, curve ORDER BY mk_60s_bps",
+      "name": "Passive fills by book × curve (drift-neutral bps, strips excluded)",
+      "topHeight": 344,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "96f7315c-d969-4380-8db4-fd41ce30f143",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "mk_60s_bps"
+         },
+         "kind": "value",
+         "appliesTo": "row",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        }
+       ]
+      },
+      "bottomHeight": 340,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "84c267d1-2dbd-48c0-8566-fb147529d9b4",
+      "position": 4,
+      "value": "WITH m AS (\n  SELECT timestamp_floor('d', t.ts) AS trade_day, t.book, t.qty > 0 AS is_buy, h.offset/1_000_000_000 AS horizon_sec,\n    count() AS n, sum(abs(t.qty)) AS therms,\n    avg(CASE WHEN t.qty>0 THEN (q.bid+q.ask)/2 - t.px ELSE t.px - (q.bid+q.ask)/2 END / t.px * 10000) AS mk,\n    sum(CASE WHEN t.qty>0 THEN (q.bid+q.ask)/2 - t.px ELSE t.px - (q.bid+q.ask)/2 END * abs(t.qty) * 0.01 * @gbp) AS pnl\n  FROM energy_fills t HORIZON JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\n  LIST (0, 60s, 300s) AS h\n  WHERE t.ts IN @compare_days AND t.passive AND t.curve = 'NBP' AND NOT t.symbol ~ '_(Q[1-4]|Sum|Win|Cal)-'\n)\nSELECT trade_day, book,\n  sum(CASE WHEN horizon_sec = 0 THEN n END) AS fills,\n  sum(CASE WHEN horizon_sec = 0 THEN therms END) AS therms,\n  avg(CASE WHEN horizon_sec = 0 THEN mk END) AS at_fill_bps,\n  avg(CASE WHEN horizon_sec = 60 THEN mk END) AS mk_60s_bps,\n  avg(CASE WHEN horizon_sec = 300 THEN mk END) AS mk_5m_bps,\n  sum(CASE WHEN horizon_sec = 60 THEN pnl END) AS pnl_60s_usd,\n  sum(CASE WHEN horizon_sec = 300 THEN pnl END) AS pnl_5m_usd\nFROM m GROUP BY trade_day, book ORDER BY book, trade_day",
+      "name": "NBP passive months by book, day vs prior day (USD)",
+      "topHeight": 440,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "f9933ca7-fa6b-4ec7-8b50-6507233bd568",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "pnl_60s_usd"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        },
+        {
+         "id": "262b0684-5098-4c56-8225-fd36c635e9f1",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "pnl_60s_usd"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataPositive",
+         "condition": {
+          "op": "gt",
+          "value": 0
+         }
+        }
+       ]
+      },
+      "bottomHeight": 200,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "e4bac60b-37a8-4615-947a-05e6b4a0272c",
+      "position": 5,
+      "value": "WITH m AS (\n  SELECT t.trader, t.book, t.qty > 0 AS is_buy, h.offset/1_000_000_000 AS horizon_sec, count() AS n,\n    avg(CASE WHEN t.qty>0 THEN (q.bid+q.ask)/2 - t.px ELSE t.px - (q.bid+q.ask)/2 END / t.px * 10000) AS mk,\n    sum(CASE WHEN t.qty>0 THEN (q.bid+q.ask)/2 - t.px ELSE t.px - (q.bid+q.ask)/2 END * abs(t.qty) * 0.01 * @gbp) AS pnl\n  FROM energy_fills t HORIZON JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\n  LIST (0, 60s, 300s) AS h\n  WHERE t.ts IN @day AND t.passive AND t.curve = 'NBP' AND NOT t.symbol ~ '_(Q[1-4]|Sum|Win|Cal)-'\n)\nSELECT trader, book, sum(CASE WHEN horizon_sec = 0 THEN n END) AS fills,\n  avg(CASE WHEN horizon_sec = 0 THEN mk END) AS at_fill_bps,\n  avg(CASE WHEN horizon_sec = 60 THEN mk END) AS mk_60s_bps,\n  avg(CASE WHEN horizon_sec = 300 THEN mk END) AS mk_5m_bps,\n  sum(CASE WHEN horizon_sec = 60 THEN pnl END) AS pnl_60s_usd\nFROM m GROUP BY trader, book ORDER BY pnl_60s_usd",
+      "name": "NBP passive months by trader (USD)",
+      "topHeight": 344,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "deaa8f26-7f53-4f84-8e18-c08e48c104ba",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "pnl_60s_usd"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        }
+       ]
+      },
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "89f0665f-e1e2-484c-abf1-0102434ec69f",
+      "position": 6,
+      "value": "WITH m AS (\n  SELECT t.venue, t.curve, t.passive, h.offset/1_000_000_000 AS horizon_sec, count() AS n,\n    sum(CASE WHEN t.qty>0 THEN (q.bid+q.ask)/2 - t.px ELSE t.px - (q.bid+q.ask)/2 END * abs(t.qty) *\n      CASE WHEN t.curve = 'NBP' THEN 0.01 * @gbp WHEN t.curve IN ('UKPWR','UKA') THEN @gbp WHEN t.curve IN ('TTF','EUA') THEN @eur ELSE 1.0 END) AS pnl\n  FROM energy_fills t HORIZON JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\n  LIST (0, 60s, 300s) AS h\n  WHERE t.ts IN @day\n)\nSELECT venue, curve, passive, sum(CASE WHEN horizon_sec = 0 THEN n END) AS fills,\n  sum(CASE WHEN horizon_sec = 0 THEN pnl END) AS spread_pnl_usd,\n  sum(CASE WHEN horizon_sec = 60 THEN pnl END) AS pnl_60s_usd,\n  sum(CASE WHEN horizon_sec = 300 THEN pnl END) AS pnl_5m_usd\nFROM m GROUP BY venue, curve, passive ORDER BY pnl_60s_usd",
+      "name": "Markout P&L by venue × curve × aggressor (USD)",
+      "topHeight": 320,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "cff5e906-5430-49ac-b136-20918eb85b74",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "pnl_60s_usd"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        },
+        {
+         "id": "5c1bcfa6-256f-45ef-96c6-6bd6c75d6330",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "pnl_60s_usd"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataPositive",
+         "condition": {
+          "op": "gt",
+          "value": 0
+         }
+        }
+       ]
+      },
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "eebc8ee5-a964-48c3-b50c-8dd95f2bdba0",
+      "position": 7,
+      "value": "## Looks wrong, but isn't an execution-quality problem\n- **EEX feed outage 08:45–08:48 UTC**: zero quotes on every EEX contract for 3 minutes. No EEX fills landed in the gap. This is a market-data issue.\n- **Stale strip quotes**: fills in Q/Sum/Win strips show markouts of ±10–30 bps at the moment of the fill, because the ICE / ICE_ENDEX strip quote was 20 s to 15 min old. The benchmark is broken here; the fills are not.\n- **Late OTC/broker booking**: broker trades are booked about 1–1.5 h after execution on average, and OTC trades about 3–7 h (up to 24 h). Intraday position and P&L views built on `booked_ts` (e.g. `energy_book_restated`) understate the book.\n- **EEX routing**: aggressive EEX fills pay roughly twice the half-spread available on the primary venue. This is a routing cost on small volume, not adverse selection.",
+      "name": "Not execution problems",
+      "type": "markdown",
+      "topHeight": 190,
+      "topResized": true
+     },
+     {
+      "id": "db097e19-8415-448e-8859-9c677fad0cc5",
+      "position": 8,
+      "value": "WITH c AS (SELECT ts, source, count() AS n FROM energy_quotes WHERE ts IN @day SAMPLE BY 1m FILL(0)),\nw AS (SELECT ts, source, n, avg(n) OVER (PARTITION BY source ORDER BY ts ROWS BETWEEN 30 PRECEDING AND 1 PRECEDING) AS baseline FROM c)\nSELECT ts AS minute, source, n AS quotes, round(baseline) AS normal_quotes FROM w WHERE n < 0.05 * baseline ORDER BY minute",
+      "name": "Quote feed outages (minutes with <5% of normal quote rate)",
+      "topHeight": 80,
+      "paneView": "result",
+      "bottomHeight": 200,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "bbf2edaf-0f33-470b-9d4a-42d391471d2c",
+      "position": 9,
+      "value": "SELECT t.ts, t.symbol, t.venue, t.passive, t.trader, t.qty, t.px, q.bid, q.ask, (t.ts - q.ts) / 1e9 AS quote_age_s,\n  CASE WHEN t.qty>0 THEN (q.bid+q.ask)/2 - t.px ELSE t.px - (q.bid+q.ask)/2 END / t.px * 10000 AS at_fill_bps\nFROM energy_fills t ASOF JOIN energy_quotes q ON (t.symbol = q.symbol AND t.venue = q.source)\nWHERE t.ts IN @day AND (t.ts - q.ts) > 30_000_000_000\nORDER BY quote_age_s DESC",
+      "name": "Fills benchmarked against a stale quote (>30 s old)",
+      "topHeight": 128,
+      "paneView": "result",
+      "bottomHeight": 200,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "cd9d4a55-445e-43de-95e6-39d182068832",
+      "position": 10,
+      "value": "SELECT channel, count() AS trades, avg((booked_ts - trade_ts) / 1e6) / 60 AS avg_delay_min,\n  max((booked_ts - trade_ts) / 1e6) / 60 AS max_delay_min,\n  sum(CASE WHEN timestamp_floor('d', booked_ts) > timestamp_floor('d', trade_ts) THEN 1 ELSE 0 END) AS booked_next_day\nFROM energy_trade_events WHERE version = 1 AND trade_ts IN @day GROUP BY channel ORDER BY avg_delay_min DESC",
+      "name": "Booking delay by channel (trade time → booked time)",
+      "topHeight": 104,
+      "paneView": "result",
+      "bottomHeight": 160,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "cbd2cb4d-c495-4a0c-bb98-35ae0da1446b",
+      "position": 11,
+      "value": "WITH f AS (SELECT ts, symbol, curve, qty, px, passive, CASE WHEN curve = 'UKPWR' THEN 'ICE' ELSE 'ICE_ENDEX' END AS src FROM energy_fills WHERE venue = 'EEX' AND ts IN @day)\nSELECT f.curve, f.passive, count() AS fills,\n avg(CASE WHEN f.qty>0 THEN (q.bid+q.ask)/2 - f.px ELSE f.px - (q.bid+q.ask)/2 END / f.px * 10000) AS at_fill_vs_primary_bps,\n avg((q.ask-q.bid)/((q.ask+q.bid)/2)*10000)/2 AS primary_half_spread_bps\nFROM f HORIZON JOIN energy_quotes q ON (f.symbol = q.symbol AND f.src = q.source)\nLIST (0) AS h ORDER BY f.curve, f.passive",
+      "name": "EEX fills measured against the primary venue (bps)",
+      "topHeight": 152,
+      "paneView": "result",
+      "bottomHeight": 160,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "bf42347a-bf8d-4001-a09f-1eab59c8173d",
+      "position": 12,
+      "value": "WITH b AS ((SELECT trade_ts, symbol, curve, qty, px, channel, counterparty,\n   CASE WHEN curve IN ('TTF','EUA') THEN 'ICE_ENDEX' WHEN curve = 'WTI' THEN 'CME' ELSE 'ICE' END AS src\n  FROM energy_trade_events WHERE version = 1 AND channel != 'EXCH' AND trade_ts IN @day ORDER BY trade_ts) timestamp(trade_ts)),\nm AS (SELECT b.counterparty, h.offset/60_000_000 AS horizon_min, count() AS n,\n  avg(CASE WHEN b.qty>0 THEN (q.bid+q.ask)/2 - b.px ELSE b.px - (q.bid+q.ask)/2 END / b.px * 10000) AS mk,\n  stddev_samp(CASE WHEN b.qty>0 THEN (q.bid+q.ask)/2 - b.px ELSE b.px - (q.bid+q.ask)/2 END / b.px * 10000) AS sd\n FROM b HORIZON JOIN energy_quotes q ON (b.symbol = q.symbol AND b.src = q.source)\n LIST (0, 5m, 30m) AS h)\nSELECT counterparty, sum(CASE WHEN horizon_min = 0 THEN n END) AS trades,\n  avg(CASE WHEN horizon_min = 0 THEN mk END) AS at_trade_bps,\n  avg(CASE WHEN horizon_min = 5 THEN mk END) AS mk_5m_bps,\n  avg(CASE WHEN horizon_min = 30 THEN mk END) AS mk_30m_bps,\n  avg(CASE WHEN horizon_min = 30 THEN mk / (sd / sqrt(n)) END) AS t_30m\nFROM m GROUP BY counterparty ORDER BY mk_30m_bps",
+      "name": "Broker/OTC counterparties: markout vs primary venue mid (bps, small samples, check t)",
+      "topHeight": 344,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "cdd4e7f1-897b-41de-9e61-624ac62ff047",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "t_30m"
+         },
+         "kind": "value",
+         "appliesTo": "row",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": -3
+         }
+        }
+       ]
+      },
+      "bottomHeight": 320,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     }
+    ],
+    "settings": {
+     "layoutMode": "grid",
+     "layout": [
+      {
+       "i": "bcd948e3-1fee-4753-ad6e-988858c8f74c",
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "8c67617e-4072-40cf-ad6c-31d54df06227",
+       "x": 0,
+       "y": 1,
+       "w": 6,
+       "h": 15
+      },
+      {
+       "i": "e3a4805d-e121-43ee-8b37-37dc3f7b86f2",
+       "x": 6,
+       "y": 1,
+       "w": 6,
+       "h": 15
+      },
+      {
+       "i": "0a536252-a4ec-401e-a3fd-e67408febbb8",
+       "x": 0,
+       "y": 2,
+       "w": 6,
+       "h": 14
+      },
+      {
+       "i": "84c267d1-2dbd-48c0-8566-fb147529d9b4",
+       "x": 6,
+       "y": 2,
+       "w": 6,
+       "h": 17
+      },
+      {
+       "i": "e4bac60b-37a8-4615-947a-05e6b4a0272c",
+       "x": 0,
+       "y": 3,
+       "w": 6,
+       "h": 14
+      },
+      {
+       "i": "89f0665f-e1e2-484c-abf1-0102434ec69f",
+       "x": 6,
+       "y": 3,
+       "w": 6,
+       "h": 13
+      },
+      {
+       "i": "eebc8ee5-a964-48c3-b50c-8dd95f2bdba0",
+       "x": 0,
+       "y": 4,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "db097e19-8415-448e-8859-9c677fad0cc5",
+       "x": 0,
+       "y": 5,
+       "w": 6,
+       "h": 5
+      },
+      {
+       "i": "bbf2edaf-0f33-470b-9d4a-42d391471d2c",
+       "x": 6,
+       "y": 5,
+       "w": 6,
+       "h": 7
+      },
+      {
+       "i": "cd9d4a55-445e-43de-95e6-39d182068832",
+       "x": 0,
+       "y": 6,
+       "w": 6,
+       "h": 6
+      },
+      {
+       "i": "cbd2cb4d-c495-4a0c-bb98-35ae0da1446b",
+       "x": 6,
+       "y": 6,
+       "w": 6,
+       "h": 8
+      },
+      {
+       "i": "bf42347a-bf8d-4001-a09f-1eab59c8173d",
+       "x": 0,
+       "y": 7,
+       "w": 12,
+       "h": 14
+      }
+     ],
+     "autoRefreshDefault": false,
+     "variables": [
+      {
+       "name": "day",
+       "value": "'2026-11-11'"
+      },
+      {
+       "name": "compare_days",
+       "value": "'2026-11-[10..11]'"
+      },
+      {
+       "name": "gbp",
+       "value": "1.3287"
+      },
+      {
+       "name": "eur",
+       "value": "1.1070"
+      }
+     ]
+    }
+   },
+   "position": 1,
+   "id": 2
+  }
+ ]
+}

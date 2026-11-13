@@ -1,0 +1,763 @@
+{
+ "origin": "http://codex1-more.localhost:19000",
+ "exported_at": "2026-11-13T11:26:31.324Z",
+ "notebooks": [
+  {
+   "label": "Execution review | 11 Nov 2026 | expanded",
+   "value": "",
+   "notebookViewState": {
+    "cells": [
+     {
+      "id": "0938c28f-f65f-4bb3-bd01-d1bf2c048562",
+      "position": 0,
+      "value": "# Execution review | Wednesday 11 November 2026\nExpanded review, updated 13 November. Session dates are fixed in UTC. Available market/trade history still ends on 12 November around 09:20 UTC; this update adds analysis, not a newly completed session.\n\n**Updated judgement:** review the Brent risk-control episode first. Execution concerns are more specific: temporary March/April gasoil timing weakness and worse aggressive EEX prices in matched routing pairs. The data does not establish desk-wide predatory flow or an identified informed exchange opponent.",
+      "name": "Updated judgement",
+      "type": "markdown",
+      "topResized": false
+     },
+     {
+      "id": "3b93d87f-be03-43cc-a6d7-55432e56a626",
+      "position": 1,
+      "value": "## New findings and revised interpretation\n| Finding | Evidence | What it means |\n|---|---|---|\n| Brent exceeded the supplied position threshold | CRUDE/BRENT booked net position peaks at **2.94m bbl**, 07:29:26 UTC, against **2m bbl**. It exceeds that threshold from **07:21:23 to 08:28:33**, about **67.2 minutes**. Trader_01 buys **3.315m bbl** of Jan-27 across 61 orders in 07:00-07:30. | A risk-control episode, separate from execution price quality. The only limit snapshot is dated 12 Nov, so Wednesday's effective limit and any approved exception cannot be established from these data. |\n| Gasoil's early loss reverses | The 43 March/April 2027 fills move from **-$28,125 at 5m to +$26,325 at 30m**. Trader_06 contributes **-$15,187.50** at 5m across 12 orders, then **+$6,662.50** at 30m. | Stronger evidence of a temporary timing mismatch than a durable adverse-selection loss. The earlier 'summer-delivery' description was imprecise; all 43 are March/April contracts. No order-intent or intended holding-period data establish whether the 5m dip was avoidable. |\n| Trader_06 concentration survives checks | On the March/April group, the trader's post-fill 5m move is **-11.54 bps**. With both benchmark ages at most 5s, 9 fills still show **-11.91 bps**, descriptive paired t=-3.61. Eleven fills with curve/hour/side peers show **-14.79 bps** excess, t=-5.32. | A focused review lead. Peer controls do not match exact contract, size, or trading objective, and statistical tests are unadjusted for screening and dependence. |\n| Aggressive EEX routing is consistently dearer in matched fills | Same-order, same-symbol, same-side child fills 1 microsecond apart: **22 TTF pairs cost 1.05 bps more on EEX**, and **11 UKPWR pairs cost 1.33 bps more**. Price differences valued on EEX-leg sizes total approximately **$2,477**. Passive EEX pairs instead receive better prices. | A routing/spread trade-off, not by itself toxicity. Different child sizes, fees, queue priority and alternate-venue capacity prevent treating the price difference as guaranteed savings. |\n| EEX market-data capture has a synchronized gap | **No EEX quotes from 08:45:00 to 08:48:00 UTC**, across the source. December TTF and UKPWR raw gaps are about 180s while primary feeds continue. **No EEX fills** occur in that window. | A feed-capture reliability issue with no measured fill loss in the gap. This does not prove the exchange itself was down. Consolidated minute bars can conceal a source-specific failure. |\n| Four TTF volatility marks are corrected | March-27 ATM, **10:30, 10:35, 10:40 and 10:45 UTC**: version 2 is exactly **8 volatility points above version 1**. At 10:30: 42.426% becomes 50.426%. | A volatility-data/versioning issue, not evidence of option execution losses. The v1 March total-variance dip below February is a surface warning; distinct delivery futures and delta rather than strike coordinates prevent declaring an arbitrage. No option positions/Greeks were supplied to size the P&L. |\n| The live position view measures flow | UK_POWER/NBP exchange flow ends Wednesday at **-3.472m therms**, while the closing booked position is **+3.963m**. The 7.435m difference reflects omitted opening inventory, OTC/broker activity and revisions. | Do not use energy_positions_live as whole-book inventory. Its definition is daily cumulative exchange fills by book and symbol. Sum latest per-symbol states before comparing curves. |\n| Apparent snapshot breaks reconcile | A trade-date-only reconstruction gives 38 mismatched book/symbol keys. Including all booking-date deltas, cancellations and book transfers, including **32 Tuesday trades first booked Wednesday**, produces **zero unmatched keys** against Thursday's opening snapshot. | An information-cutoff problem, not evidence of unexplained missing positions. This is a quantity reconciliation, not a cash/cost or valuation reconciliation. |",
+      "name": "New findings and revised summary",
+      "type": "markdown",
+      "topResized": false
+     },
+     {
+      "id": "094763d0-7c22-4abf-9f55-f2a1839d717e",
+      "position": 2,
+      "value": "WITH ev AS (SELECT booked_ts,trade_ts,trade_id,book,curve,CASE WHEN status='CANCELLED' THEN 0 ELSE qty END eff,lag(CASE WHEN status='CANCELLED' THEN 0 ELSE qty END) OVER (PARTITION BY trade_id ORDER BY booked_ts,version) prev_eff,lag(book) OVER (PARTITION BY trade_id ORDER BY booked_ts,version) prev_book FROM energy_trade_events), legs AS (SELECT ts,book,curve,qty FROM energy_position_snapshots WHERE ts IN '2026-11-11' UNION ALL SELECT booked_ts ts,book,curve,eff qty FROM ev WHERE booked_ts IN '2026-11-11' UNION ALL SELECT booked_ts ts,prev_book book,curve,-prev_eff qty FROM ev WHERE booked_ts IN '2026-11-11' AND prev_book IS NOT NULL), steps AS (SELECT ts,book,curve,sum(qty) qty FROM legs GROUP BY ts,book,curve), running AS (SELECT ts,book,curve,sum(qty) OVER (PARTITION BY book,curve ORDER BY ts) pos FROM steps) SELECT ts,pos,2000000.0 supplied_limit FROM running WHERE book='CRUDE' AND curve='BRENT' AND ts IN '2026-11-11T06:45;2h' ORDER BY ts",
+      "name": "NEW | Booked Brent position against supplied limit | bbl",
+      "topHeight": 180,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "ts",
+       "queries": [
+        {
+         "type": "stepLine",
+         "yColumns": [
+          "pos",
+          "supplied_limit"
+         ],
+         "axis": "left"
+        }
+       ]
+      },
+      "autoRefresh": false,
+      "bottomHeight": 340,
+      "topResized": true,
+      "bottomResized": true
+     },
+     {
+      "id": "bc2845cc-5448-43c3-a3a7-a2c77695aca3",
+      "position": 3,
+      "value": "SELECT ts,source,count() quotes FROM energy_quotes WHERE ts IN '2026-11-11T08:44;5m' AND symbol IN ('TTF_Dec-26','UKPWR_Dec-26') SAMPLE BY 10s FILL(0) ORDER BY ts",
+      "name": "NEW | EEX quote gap and continuing primary feeds | quotes/10s",
+      "topHeight": 180,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "ts",
+       "queries": [
+        {
+         "type": "line",
+         "yColumns": [
+          "quotes"
+         ],
+         "partitionByColumn": "source",
+         "axis": "left"
+        }
+       ]
+      },
+      "autoRefresh": false,
+      "bottomHeight": 340,
+      "topResized": true,
+      "bottomResized": true
+     },
+     {
+      "id": "d099d3ff-d331-4f60-b11c-1587a27adb9a",
+      "position": 4,
+      "value": "WITH ev AS (SELECT booked_ts,trade_ts,trade_id,book,curve,CASE WHEN status='CANCELLED' THEN 0 ELSE qty END eff,lag(CASE WHEN status='CANCELLED' THEN 0 ELSE qty END) OVER (PARTITION BY trade_id ORDER BY booked_ts,version) prev_eff,lag(book) OVER (PARTITION BY trade_id ORDER BY booked_ts,version) prev_book FROM energy_trade_events), legs AS (SELECT ts,book,curve,qty FROM energy_position_snapshots WHERE ts IN '2026-11-11' UNION ALL SELECT booked_ts ts,book,curve,eff qty FROM ev WHERE booked_ts IN '2026-11-11' UNION ALL SELECT booked_ts ts,prev_book book,curve,-prev_eff qty FROM ev WHERE booked_ts IN '2026-11-11' AND prev_book IS NOT NULL), steps AS (SELECT ts,book,curve,sum(qty) qty FROM legs GROUP BY ts,book,curve), running AS (SELECT ts,book,curve,sum(qty) OVER (PARTITION BY book,curve ORDER BY ts) pos FROM steps), states AS (SELECT ts,book,curve,pos,lead(ts) OVER (PARTITION BY book,curve ORDER BY ts) next_ts FROM running), a AS (SELECT r.book,r.curve,l.max_abs_qty,l.unit,max(abs(pos)) peak_abs_position,min(CASE WHEN abs(pos)>l.max_abs_qty THEN r.ts ELSE null END) first_exceedance,max(CASE WHEN abs(pos)>l.max_abs_qty THEN next_ts ELSE null END) last_clearance,sum(CASE WHEN abs(pos)>l.max_abs_qty THEN (coalesce(next_ts,'2026-11-12'::timestamp)-r.ts)/1000000.0 ELSE 0 END) seconds_over FROM states r JOIN energy_limits l ON r.book=l.book AND r.curve=l.curve GROUP BY r.book,r.curve,l.max_abs_qty,l.unit) SELECT *,peak_abs_position/max_abs_qty peak_utilisation FROM a ORDER BY peak_utilisation DESC",
+      "name": "NEW | Intraday booked limit exceedance and duration",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "bb3a9d81-32c1-409e-aa0c-9113b4581188",
+      "position": 5,
+      "value": "SELECT trader,symbol,passive,sign(qty) side,count() fills,count_distinct(order_id) orders,sum(qty) net_bbl,avg(px) avg_px FROM energy_fills WHERE curve='BRENT' AND ts IN '2026-11-11T07:00;30m' GROUP BY trader,symbol,passive,side ORDER BY net_bbl DESC",
+      "name": "NEW | Brent buying programme | 07:00-07:30 UTC",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "7a9373b4-566b-4d69-827e-d0c5195f9642",
+      "position": 6,
+      "value": "WITH obs AS (SELECT f.trade_id,f.order_id,f.ts,f.book,f.trader,f.symbol,f.curve,f.venue,f.passive,f.qty,f.px,h.offset/1000000000.0 horizon_s,q.ts quote_ts,q.bid,q.ask,q.bid_size,q.ask_size,(f.ts+h.offset-q.ts)/1000000000.0 age_s,sign(f.qty)*((q.bid+q.ask)/2-f.px)/f.px*10000 bps,(q.ask-q.bid)/f.px*5000 halfspread FROM energy_fills f HORIZON JOIN energy_quotes q ON (f.symbol=q.symbol AND f.venue=q.source) LIST (-30s,0,1s,30s,5m,30m) AS h WHERE f.ts IN '2026-11-11'), perfill AS (SELECT trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px,max(CASE WHEN horizon_s=0 THEN bps ELSE null END) b0,max(CASE WHEN horizon_s=30 THEN bps ELSE null END) b30,max(CASE WHEN horizon_s=300 THEN bps ELSE null END) b5,max(CASE WHEN horizon_s=1800 THEN bps ELSE null END) b30m,max(CASE WHEN horizon_s=0 THEN age_s ELSE null END) age0,max(CASE WHEN horizon_s=300 THEN age_s ELSE null END) age5,max(CASE WHEN horizon_s=0 THEN halfspread ELSE null END) halfspread FROM obs GROUP BY trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px), a AS (SELECT f.trader,count() n,avg(b5) mean_bps5,avg(b30m) mean_bps30,stddev_samp(b30m) sd30,sum(b5*px*abs(qty)/10000) usd5,sum(b30m*px*abs(qty)/10000) usd30,avg(b30m-b0) move30m FROM perfill f JOIN energy_instruments i ON (symbol) WHERE f.curve='GASOIL' AND month(i.delivery_start) NOT IN (11,12,1,2) GROUP BY f.trader) SELECT *,mean_bps30/(sd30/sqrt(n)) t_bps30 FROM a ORDER BY usd5",
+      "name": "NEW | Gasoil trader attribution and 30-minute reversal",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "dffb1441-69fd-466e-9a95-d6a5a7fcdd45",
+      "position": 7,
+      "value": "WITH obs AS (SELECT f.trade_id,f.order_id,f.ts,f.book,f.trader,f.symbol,f.curve,f.venue,f.passive,f.qty,f.px,h.offset/1000000000.0 horizon_s,q.ts quote_ts,q.bid,q.ask,q.bid_size,q.ask_size,(f.ts+h.offset-q.ts)/1000000000.0 age_s,sign(f.qty)*((q.bid+q.ask)/2-f.px)/f.px*10000 bps,(q.ask-q.bid)/f.px*5000 halfspread FROM energy_fills f HORIZON JOIN energy_quotes q ON (f.symbol=q.symbol AND f.venue=q.source) LIST (-30s,0,1s,30s,5m,30m) AS h WHERE f.ts IN '2026-11-11') SELECT o.trader,horizon_s,count() n,avg(bps) bps FROM obs o JOIN energy_instruments i ON (symbol) WHERE o.curve='GASOIL' AND month(i.delivery_start) NOT IN (11,12,1,2) GROUP BY o.trader,horizon_s ORDER BY o.trader,horizon_s",
+      "name": "NEW | Gasoil curves | Mar-Oct delivery months, mean bps",
+      "topHeight": 180,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "horizon_s",
+       "queries": [
+        {
+         "type": "line",
+         "yColumns": [
+          "bps"
+         ],
+         "partitionByColumn": "trader",
+         "axis": "left"
+        }
+       ]
+      },
+      "autoRefresh": false,
+      "bottomHeight": 340,
+      "topResized": true,
+      "bottomResized": true
+     },
+     {
+      "id": "af644a73-2524-4dc9-82e2-9d242f546cc2",
+      "position": 8,
+      "value": "WITH obs AS (SELECT f.trade_id,f.order_id,f.ts,f.book,f.trader,f.symbol,f.curve,f.venue,f.passive,f.qty,f.px,h.offset/1000000000.0 horizon_s,q.ts quote_ts,q.bid,q.ask,q.bid_size,q.ask_size,(f.ts+h.offset-q.ts)/1000000000.0 age_s,sign(f.qty)*((q.bid+q.ask)/2-f.px)/f.px*10000 bps,(q.ask-q.bid)/f.px*5000 halfspread FROM energy_fills f HORIZON JOIN energy_quotes q ON (f.symbol=q.symbol AND f.venue=q.source) LIST (-30s,0,1s,30s,5m,30m) AS h WHERE f.ts IN '2026-11-11'), perfill AS (SELECT trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px,max(CASE WHEN horizon_s=0 THEN bps ELSE null END) b0,max(CASE WHEN horizon_s=30 THEN bps ELSE null END) b30,max(CASE WHEN horizon_s=300 THEN bps ELSE null END) b5,max(CASE WHEN horizon_s=1800 THEN bps ELSE null END) b30m,max(CASE WHEN horizon_s=0 THEN age_s ELSE null END) age0,max(CASE WHEN horizon_s=300 THEN age_s ELSE null END) age5,max(CASE WHEN horizon_s=0 THEN halfspread ELSE null END) halfspread FROM obs GROUP BY trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px), a AS (SELECT f.trader,CASE WHEN month(i.delivery_start) IN (11,12,1,2) THEN 'Nov-Feb' ELSE 'Mar-Oct' END delivery_months,count() n,avg(b0) b0,avg(b5) b5,avg(b5-b0) move5,stddev_samp(b5-b0) sd,sum(b5*px*abs(qty)/10000) usd5 FROM perfill f JOIN energy_instruments i ON (symbol) WHERE f.curve='GASOIL' AND age0<=5 AND age5<=5 GROUP BY f.trader,delivery_months) SELECT *,move5/(sd/sqrt(n)) t_move FROM a ORDER BY delivery_months,move5",
+      "name": "NEW | Gasoil freshness sensitivity | both quote ages at most 5s",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "780e8eff-b021-46b4-9e02-d79f8dc68640",
+      "position": 9,
+      "value": "WITH obs AS (SELECT f.trade_id,f.order_id,f.ts,f.book,f.trader,f.symbol,f.curve,f.venue,f.passive,f.qty,f.px,h.offset/1000000000.0 horizon_s,q.ts quote_ts,q.bid,q.ask,q.bid_size,q.ask_size,(f.ts+h.offset-q.ts)/1000000000.0 age_s,sign(f.qty)*((q.bid+q.ask)/2-f.px)/f.px*10000 bps,(q.ask-q.bid)/f.px*5000 halfspread FROM energy_fills f HORIZON JOIN energy_quotes q ON (f.symbol=q.symbol AND f.venue=q.source) LIST (-30s,0,1s,30s,5m,30m) AS h WHERE f.ts IN '2026-11-11'), perfill AS (SELECT trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px,max(CASE WHEN horizon_s=0 THEN bps ELSE null END) b0,max(CASE WHEN horizon_s=30 THEN bps ELSE null END) b30,max(CASE WHEN horizon_s=300 THEN bps ELSE null END) b5,max(CASE WHEN horizon_s=1800 THEN bps ELSE null END) b30m,max(CASE WHEN horizon_s=0 THEN age_s ELSE null END) age0,max(CASE WHEN horizon_s=300 THEN age_s ELSE null END) age5,max(CASE WHEN horizon_s=0 THEN halfspread ELSE null END) halfspread FROM obs GROUP BY trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px), buckets AS (SELECT curve,timestamp_floor('1h',ts) hr,sign(qty) side,sum(b5-b0) sm,count() nn FROM perfill GROUP BY curve,hr,side), own AS (SELECT trader,curve,timestamp_floor('1h',ts) hr,sign(qty) side,sum(b5-b0) sm,count() nn FROM perfill GROUP BY trader,curve,hr,side), residual AS (SELECT f.trader,f.curve,f.symbol,f.b5-f.b0-(b.sm-o.sm)/(b.nn-o.nn) excess,b.nn-o.nn peers FROM perfill f JOIN buckets b ON f.curve=b.curve AND timestamp_floor('1h',f.ts)=b.hr AND sign(f.qty)=b.side JOIN own o ON f.trader=o.trader AND f.curve=o.curve AND timestamp_floor('1h',f.ts)=o.hr AND sign(f.qty)=o.side JOIN energy_instruments i ON (f.symbol=i.symbol) WHERE f.curve='GASOIL' AND month(i.delivery_start) NOT IN (11,12,1,2) AND b.nn-o.nn>=3), a AS (SELECT trader,count() matched_n,avg(excess) excess_bps,stddev_samp(excess) sd,min(peers) min_peers FROM residual GROUP BY trader) SELECT *,excess_bps/(sd/sqrt(matched_n)) t_excess FROM a ORDER BY excess_bps",
+      "name": "NEW | Gasoil trader peer control | curve/hour/side, tenor not controlled",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "6a110fa4-a8c9-4d44-aff0-aa512b6d54ff",
+      "position": 10,
+      "value": "DECLARE @asof:='2026-11-11T23:59:59.999999'::timestamp WITH pairs AS (SELECT a.ts,a.order_id,a.trade_id,a.curve,a.symbol,a.venue,a.passive,a.qty,a.px,b.ts peer_ts,b.trade_id peer_trade,b.venue peer_venue,b.passive peer_passive,b.qty peer_qty,b.px peer_px,(b.ts-a.ts)/1000000000.0 delay_s,sign(a.qty)*(a.px-b.px) px_extra FROM energy_fills a JOIN energy_fills b ON a.symbol=b.symbol AND a.order_id=b.order_id WHERE a.ts IN '2026-11-11' AND a.venue='EEX' AND b.venue!='EEX'), a AS (SELECT p.curve,p.passive,count() n,min(delay_s) min_delay_s,max(delay_s) max_delay_s,sum(CASE WHEN sign(qty)=sign(peer_qty) THEN 1 ELSE 0 END) same_side,avg(px_extra/px*10000) eex_worse_bps,sum(px_extra*abs(qty)*u.factor) usd_difference FROM pairs p JOIN energy_usd_factor_asof u ON (symbol) GROUP BY p.curve,p.passive) SELECT * FROM a ORDER BY curve,passive",
+      "name": "NEW | Same-order EEX versus ICE fills | signed price differences",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "8fae70f8-6694-4774-9ff4-206960f9aeba",
+      "position": 11,
+      "value": "SELECT a.ts,a.order_id,a.trade_id,a.curve,a.symbol,a.venue,a.passive,a.qty,a.px,b.ts peer_ts,b.trade_id peer_trade,b.venue peer_venue,b.passive peer_passive,b.qty peer_qty,b.px peer_px,(b.ts-a.ts)/1000000000.0 delay_s,sign(a.qty)*(a.px-b.px) px_extra FROM energy_fills a JOIN energy_fills b ON a.symbol=b.symbol AND a.order_id=b.order_id WHERE a.ts IN '2026-11-11' AND a.venue='EEX' AND b.venue!='EEX' ORDER BY curve,ts",
+      "name": "NEW | Paired routing audit | actual child fills 1 microsecond apart",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "d44ea4f2-0f63-400e-8e5d-225a22fdf24d",
+      "position": 12,
+      "value": "SELECT a.ts,a.symbol,a.iv v1,b.iv v2,100*(b.iv-a.iv) vol_points,a.iv*a.iv*a.tau v1_total_variance,b.iv*b.iv*b.tau v2_total_variance,c.iv*c.iv*c.tau feb_total_variance FROM energy_iv_marks a JOIN energy_iv_marks b ON a.ts=b.ts AND a.symbol=b.symbol AND a.delta_bucket=b.delta_bucket JOIN energy_iv_marks c ON a.ts=c.ts AND c.symbol='TTF_Feb-27' AND c.delta_bucket='ATM' AND c.version=1 WHERE a.version=1 AND b.version=2",
+      "name": "NEW | TTF volatility corrections | 8 volatility points",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "57d7b47d-ea5e-4b4b-b182-f63b8288bc4a",
+      "position": 13,
+      "value": "WITH f AS (SELECT book,symbol,curve,pos FROM energy_positions_live WHERE ts IN '2026-11-11' LATEST ON ts PARTITION BY book,symbol), flow AS (SELECT book,curve,sum(pos) exchange_flow FROM f GROUP BY book,curve), s AS (SELECT book,curve,sum(qty) booked_position FROM energy_position_snapshots WHERE ts IN '2026-11-12' GROUP BY book,curve) SELECT s.book,s.curve,f.exchange_flow,s.booked_position,s.booked_position-coalesce(f.exchange_flow,0) difference FROM s LEFT JOIN flow f ON s.book=f.book AND s.curve=f.curve ORDER BY s.book,s.curve",
+      "name": "NEW | Position view meaning | exchange flow is not booked inventory",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "5557fe24-02f0-41a4-a6bf-1b4d71dc8651",
+      "position": 14,
+      "value": "WITH ev AS (SELECT booked_ts,trade_id,book,curve,symbol,CASE WHEN status='CANCELLED' THEN 0 ELSE qty END eff,lag(CASE WHEN status='CANCELLED' THEN 0 ELSE qty END) OVER (PARTITION BY trade_id ORDER BY booked_ts,version) prev_eff,lag(book) OVER (PARTITION BY trade_id ORDER BY booked_ts,version) prev_book,lag(symbol) OVER (PARTITION BY trade_id ORDER BY booked_ts,version) prev_symbol FROM energy_trade_events), legs AS (SELECT book,symbol,curve,qty FROM energy_position_snapshots WHERE ts IN '2026-11-11' UNION ALL SELECT book,symbol,curve,eff qty FROM ev WHERE booked_ts IN '2026-11-11' UNION ALL SELECT prev_book book,prev_symbol symbol,curve,-prev_eff qty FROM ev WHERE booked_ts IN '2026-11-11' AND prev_book IS NOT NULL), calc AS (SELECT book,symbol,curve,sum(qty) rebuilt FROM legs GROUP BY book,symbol,curve), sod AS (SELECT book,symbol,sum(qty) snapshot FROM energy_position_snapshots WHERE ts IN '2026-11-12' GROUP BY book,symbol), differences AS (SELECT coalesce(c.book,s.book) book,coalesce(c.symbol,s.symbol) symbol,c.rebuilt,s.snapshot,coalesce(c.rebuilt,0)-coalesce(s.snapshot,0) difference FROM calc c FULL OUTER JOIN sod s ON c.book=s.book AND c.symbol=s.symbol WHERE coalesce(c.rebuilt,0)!=coalesce(s.snapshot,0) ORDER BY abs(difference) DESC) SELECT count() mismatched_book_symbol_keys FROM differences",
+      "name": "NEW | Snapshot reconciliation | mismatched keys should be zero",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "268b27c9-c6b6-40d7-9e4e-cf3534bb6e65",
+      "position": 15,
+      "value": "SELECT book,curve,sum(qty) net_qty,sum(abs(qty)) gross_venue_tenor_qty,count() position_legs FROM energy_position_snapshots WHERE ts IN '2026-11-12' GROUP BY book,curve ORDER BY book,curve",
+      "name": "NEW | Closing net versus gross venue and tenor positions",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "083e680d-51df-4788-af70-c9d96a948702",
+      "position": 16,
+      "value": "DECLARE @asof:='2026-11-11T23:59:59.999999'::timestamp WITH obs AS (SELECT f.trade_id,f.order_id,f.ts,f.book,f.trader,f.symbol,f.curve,f.venue,f.passive,f.qty,f.px,h.offset/1000000000.0 horizon_s,q.ts quote_ts,q.bid,q.ask,q.bid_size,q.ask_size,(f.ts+h.offset-q.ts)/1000000000.0 age_s,sign(f.qty)*((q.bid+q.ask)/2-f.px)/f.px*10000 bps,(q.ask-q.bid)/f.px*5000 halfspread FROM energy_fills f HORIZON JOIN energy_quotes q ON (f.symbol=q.symbol AND f.venue=q.source) LIST (-30s,0,1s,30s,5m,30m) AS h WHERE f.ts IN '2026-11-11'), perfill AS (SELECT trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px,max(CASE WHEN horizon_s=0 THEN bps ELSE null END) b0,max(CASE WHEN horizon_s=30 THEN bps ELSE null END) b30,max(CASE WHEN horizon_s=300 THEN bps ELSE null END) b5,max(CASE WHEN horizon_s=1800 THEN bps ELSE null END) b30m,max(CASE WHEN horizon_s=0 THEN age_s ELSE null END) age0,max(CASE WHEN horizon_s=300 THEN age_s ELSE null END) age5,max(CASE WHEN horizon_s=0 THEN halfspread ELSE null END) halfspread FROM obs GROUP BY trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px) SELECT f.curve,count() fills,count_distinct(order_id) orders,avg(b5) mean_bps5,sum(b5*px*abs(qty)*u.factor/10000) usd5,sum(b30m*px*abs(qty)*u.factor/10000) usd30,sum(b5*px*abs(qty)*u.factor)/sum(px*abs(qty)*u.factor) notional_weighted_bps5 FROM perfill f JOIN energy_usd_factor_asof u ON (symbol) GROUP BY f.curve ORDER BY usd5",
+      "name": "Exchange scorecard | gross USD markouts, original fills",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "4de424d0-8e73-4b76-8608-657f64bb8d48",
+      "position": 17,
+      "value": "WITH obs AS (SELECT f.trade_id,f.order_id,f.ts,f.book,f.trader,f.symbol,f.curve,f.venue,f.passive,f.qty,f.px,h.offset/1000000000.0 horizon_s,q.ts quote_ts,q.bid,q.ask,q.bid_size,q.ask_size,(f.ts+h.offset-q.ts)/1000000000.0 age_s,sign(f.qty)*((q.bid+q.ask)/2-f.px)/f.px*10000 bps,(q.ask-q.bid)/f.px*5000 halfspread FROM energy_fills f HORIZON JOIN energy_quotes q ON (f.symbol=q.symbol AND f.venue=q.source) LIST (-30s,0,1s,30s,5m,30m) AS h WHERE f.ts IN '2026-11-[10..11]'), perfill AS (SELECT trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px,max(CASE WHEN horizon_s=0 THEN bps ELSE null END) b0,max(CASE WHEN horizon_s=30 THEN bps ELSE null END) b30,max(CASE WHEN horizon_s=300 THEN bps ELSE null END) b5,max(CASE WHEN horizon_s=1800 THEN bps ELSE null END) b30m,max(CASE WHEN horizon_s=0 THEN age_s ELSE null END) age0,max(CASE WHEN horizon_s=300 THEN age_s ELSE null END) age5,max(CASE WHEN horizon_s=0 THEN halfspread ELSE null END) halfspread FROM obs GROUP BY trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px), a AS (SELECT timestamp_floor('d',f.ts) day,CASE WHEN month(i.delivery_start) IN (11,12,1,2) THEN 'Nov-Feb' ELSE 'Mar-Oct' END delivery_months,sign(qty) side,count() n,avg(b0) b0,avg(halfspread) halfspread,avg(b5) bps5,avg(b30m) bps30,avg(b5-b0) move5,stddev_samp(b5-b0) sd,sum(b5*px*abs(qty)/10000) usd5,sum(b30m*px*abs(qty)/10000) usd30 FROM perfill f JOIN energy_instruments i ON (symbol) WHERE f.curve='GASOIL' GROUP BY day,delivery_months,side) SELECT *,move5/(sd/sqrt(n)) t_move FROM a ORDER BY day,delivery_months,side",
+      "name": "Gasoil | delivery-season and prior-day control",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "98b74256-c3c7-4de3-9a85-4f3f29a2c503",
+      "position": 18,
+      "value": "DECLARE @asof:='2026-11-11T23:59:59.999999'::timestamp WITH obs AS (SELECT t.trade_id,t.trade_ts,t.book,t.trader,t.symbol,t.curve,t.qty,t.px,t.channel,t.counterparty,h.offset/1000000.0 horizon_s,q.bid,q.ask FROM ((SELECT *,trade_ts AS event_ts FROM energy_trade_events WHERE version=1 AND trade_ts IN '2026-11-11' ORDER BY event_ts) timestamp(event_ts)) t HORIZON JOIN energy_quotes q ON (symbol) LIST (0,5m,30m) AS h), pertrade AS (SELECT trade_id,trade_ts,book,trader,symbol,curve,qty,px,channel,counterparty,max(CASE WHEN horizon_s=0 THEN (bid+ask)/2 ELSE null END) mid0,max(CASE WHEN horizon_s=300 THEN (bid+ask)/2 ELSE null END) mid5,max(CASE WHEN horizon_s=1800 THEN (bid+ask)/2 ELSE null END) mid30 FROM obs GROUP BY trade_id,trade_ts,book,trader,symbol,curve,qty,px,channel,counterparty), amended AS (SELECT * FROM energy_trade_events WHERE booked_ts<='2026-11-12T09:20:15' LATEST ON booked_ts PARTITION BY trade_id), graded AS (SELECT p.trade_ts,p.symbol,p.curve,p.channel,p.counterparty,p.trader,e.qty,e.px,sign(e.qty)*(p.mid0-e.px)/e.px*10000 b0,sign(e.qty)*(p.mid5-e.px)/e.px*10000 b5,sign(e.qty)*(p.mid30-e.px)/e.px*10000 b30,sign(e.qty)*(p.mid5-e.px)*abs(e.qty) pnl5,sign(e.qty)*(p.mid30-e.px)*abs(e.qty) pnl30 FROM pertrade p JOIN amended e ON (trade_id) WHERE e.status!='CANCELLED'), a AS (SELECT g.counterparty,count() n,avg(b0) b0,avg(b5) b5,avg(b30) b30,avg(b5-b0) move5,stddev_samp(b5-b0) sd,sum(pnl5*u.factor) usd5,sum(pnl30*u.factor) usd30 FROM graded g JOIN energy_usd_factor_asof u ON (symbol) WHERE channel!='EXCH' GROUP BY g.counterparty) SELECT *,move5/(sd/sqrt(n)) t_move FROM a ORDER BY b5",
+      "name": "Named counterparty watchlist | small samples, corrected bookings",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "6062357f-dc0c-4b0e-98f3-6bc5e8fa1a34",
+      "position": 19,
+      "value": "DECLARE @asof:='2026-11-11T23:59:59.999999'::timestamp WITH obs AS (SELECT t.trade_id,t.trade_ts,t.book,t.trader,t.symbol,t.curve,t.qty,t.px,t.channel,t.counterparty,h.offset/1000000.0 horizon_s,q.bid,q.ask FROM ((SELECT *,trade_ts AS event_ts FROM energy_trade_events WHERE version=1 AND trade_ts IN '2026-11-11' ORDER BY event_ts) timestamp(event_ts)) t HORIZON JOIN energy_quotes q ON (symbol) LIST (0,5m,30m) AS h), pertrade AS (SELECT trade_id,trade_ts,book,trader,symbol,curve,qty,px,channel,counterparty,max(CASE WHEN horizon_s=0 THEN (bid+ask)/2 ELSE null END) mid0,max(CASE WHEN horizon_s=300 THEN (bid+ask)/2 ELSE null END) mid5,max(CASE WHEN horizon_s=1800 THEN (bid+ask)/2 ELSE null END) mid30 FROM obs GROUP BY trade_id,trade_ts,book,trader,symbol,curve,qty,px,channel,counterparty), amended AS (SELECT * FROM energy_trade_events WHERE booked_ts<='2026-11-12T09:20:15' LATEST ON booked_ts PARTITION BY trade_id), graded AS (SELECT p.trade_ts,p.symbol,p.curve,p.channel,p.counterparty,p.trader,e.qty,e.px,sign(e.qty)*(p.mid0-e.px)/e.px*10000 b0,sign(e.qty)*(p.mid5-e.px)/e.px*10000 b5,sign(e.qty)*(p.mid30-e.px)/e.px*10000 b30,sign(e.qty)*(p.mid5-e.px)*abs(e.qty) pnl5,sign(e.qty)*(p.mid30-e.px)*abs(e.qty) pnl30 FROM pertrade p JOIN amended e ON (trade_id) WHERE e.status!='CANCELLED') SELECT channel,count() n,avg(b5) mean_bps5,sum(pnl5*u.factor) usd5,sum(pnl30*u.factor) usd30 FROM graded g JOIN energy_usd_factor_asof u ON (symbol) WHERE channel!='EXCH' GROUP BY channel",
+      "name": "Non-exchange totals | gross USD, corrected active trades",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "f4a44602-676e-4664-82a7-c09ac3050a8e",
+      "position": 20,
+      "value": "WITH bars AS (SELECT ts,symbol,close,first_value(close) OVER (PARTITION BY symbol ORDER BY ts) start_px FROM energy_quotes_1m WHERE ts IN '2026-11-11T09:20;40m' AND symbol IN ('NBP_Dec-26','TTF_Jan-27','UKPWR_Jan-27')) SELECT ts,symbol,100*(close/start_px-1) return_pct FROM bars ORDER BY ts",
+      "name": "09:30 common gas and power rally | returns since 09:20",
+      "topHeight": 180,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "ts",
+       "queries": [
+        {
+         "type": "line",
+         "yColumns": [
+          "return_pct"
+         ],
+         "partitionByColumn": "symbol",
+         "axis": "left"
+        }
+       ]
+      },
+      "autoRefresh": false,
+      "bottomHeight": 340,
+      "topResized": true,
+      "bottomResized": true
+     },
+     {
+      "id": "88cf9a04-8a22-446a-9184-e435cecc69b6",
+      "position": 21,
+      "value": "DECLARE @asof:='2026-11-11T23:59:59.999999'::timestamp WITH obs AS (SELECT f.trade_id,f.order_id,f.ts,f.book,f.trader,f.symbol,f.curve,f.venue,f.passive,f.qty,f.px,h.offset/1000000000.0 horizon_s,q.ts quote_ts,q.bid,q.ask,q.bid_size,q.ask_size,(f.ts+h.offset-q.ts)/1000000000.0 age_s,sign(f.qty)*((q.bid+q.ask)/2-f.px)/f.px*10000 bps,(q.ask-q.bid)/f.px*5000 halfspread FROM energy_fills f HORIZON JOIN energy_quotes q ON (f.symbol=q.symbol AND f.venue=q.source) LIST (-30s,0,1s,30s,5m,30m) AS h WHERE f.ts IN '2026-11-11'), perfill AS (SELECT trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px,max(CASE WHEN horizon_s=0 THEN bps ELSE null END) b0,max(CASE WHEN horizon_s=30 THEN bps ELSE null END) b30,max(CASE WHEN horizon_s=300 THEN bps ELSE null END) b5,max(CASE WHEN horizon_s=1800 THEN bps ELSE null END) b30m,max(CASE WHEN horizon_s=0 THEN age_s ELSE null END) age0,max(CASE WHEN horizon_s=300 THEN age_s ELSE null END) age5,max(CASE WHEN horizon_s=0 THEN halfspread ELSE null END) halfspread FROM obs GROUP BY trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px) SELECT f.curve,CASE WHEN ts IN '2026-11-11T09:20;40m' THEN '09:20-10:00 UTC' ELSE 'rest of session' END period,sign(qty) side,count() n,avg(b0) b0,avg(b5) b5,avg(b30m) b30m,sum(b5*px*abs(qty)*u.factor/10000) usd5,sum(b30m*px*abs(qty)*u.factor/10000) usd30 FROM perfill f JOIN energy_usd_factor_asof u ON (symbol) WHERE f.curve IN ('TTF','NBP','UKPWR') GROUP BY f.curve,period,side ORDER BY curve,period,side",
+      "name": "Shock versus rest | buys and sells, gross USD markouts",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "c695439f-23a8-4bdd-9f4f-a6259031dfe1",
+      "position": 22,
+      "value": "DECLARE @day:='2026-11-11'::timestamp,@asof:='2026-11-11T23:59:59.999999'::timestamp SELECT model_version,curve,season,count() n,avg(err_bps) bias_bps,avg(abs(err_bps)) mae_bps FROM energy_model_graded_day GROUP BY model_version,curve,season ORDER BY mae_bps DESC",
+      "name": "Winter model bias | fixed session and as-of",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "a5cde6f0-f113-4900-8dbc-25b388f5da03",
+      "position": 23,
+      "value": "SELECT model_version,curve,min(ts) first_ts,max(ts) last_ts,avg((ts-inputs_ts)/1000000.0) mean_input_age_s,max((ts-inputs_ts)/1000000.0) max_input_age_s FROM energy_model_prices WHERE ts IN '2026-11-11' GROUP BY model_version,curve",
+      "name": "Model input freshness | observed timestamps, seconds",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "cd2846ce-6a7b-499b-b998-0d77f5e4b905",
+      "position": 24,
+      "value": "SELECT m.ts,m.symbol,m.marked_by,m.price manual_v1,c.price market_v2,m.price-c.price correction FROM energy_curve_marks m JOIN energy_curve_marks c ON m.ts=c.ts AND m.symbol=c.symbol WHERE m.source='MANUAL' AND c.version=2 AND m.ts IN '2026-11-11' ORDER BY m.ts",
+      "name": "Manual TTF curve mark correction | EUR/MWh",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "9228c287-cd40-4d53-9282-af3776975cee",
+      "position": 25,
+      "value": "DECLARE @day:='2026-11-11'::timestamp SELECT source,count() observations,max(abs(gap)) max_abs_gap,avg(abs(gap)) mean_abs_gap FROM energy_strip_gaps_day GROUP BY source",
+      "name": "Strip replication check | delivery-day or hour weighted",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "3268a1cc-850e-4c7c-9729-20b70bbd7e7e",
+      "position": 26,
+      "value": "SELECT timestamp_floor('d',trade_ts) trade_day,timestamp_floor('d',booked_ts) booking_day,channel,count() n FROM energy_trade_events WHERE version=1 GROUP BY trade_day,booking_day,channel ORDER BY trade_day,booking_day,channel",
+      "name": "Late bookings in both directions | trade day versus booking day",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "8ba4a8ba-b2f7-473d-aa80-e4ec9bebc473",
+      "position": 27,
+      "value": "WITH obs AS (SELECT f.trade_id,f.order_id,f.ts,f.book,f.trader,f.symbol,f.curve,f.venue,f.passive,f.qty,f.px,h.offset/1000000000.0 horizon_s,q.ts quote_ts,q.bid,q.ask,q.bid_size,q.ask_size,(f.ts+h.offset-q.ts)/1000000000.0 age_s,sign(f.qty)*((q.bid+q.ask)/2-f.px)/f.px*10000 bps,(q.ask-q.bid)/f.px*5000 halfspread FROM energy_fills f HORIZON JOIN energy_quotes q ON (f.symbol=q.symbol AND f.venue=q.source) LIST (-30s,0,1s,30s,5m,30m) AS h WHERE f.ts IN '2026-11-11') SELECT curve,venue,horizon_s,count() fills,count(bps) matched,avg(age_s) mean_age_s,max(age_s) max_age_s,sum(CASE WHEN age_s>5 THEN 1 ELSE 0 END) older_than_5s FROM obs WHERE horizon_s IN (0,300) GROUP BY curve,venue,horizon_s ORDER BY max_age_s DESC",
+      "name": "Quote freshness | same-venue benchmark ages",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "25d25259-01dc-44da-8618-a0951c72326f",
+      "position": 28,
+      "value": "DECLARE @asof:='2026-11-11T23:59:59.999999'::timestamp WITH obs AS (SELECT f.trade_id,f.order_id,f.ts,f.book,f.trader,f.symbol,f.curve,f.venue,f.passive,f.qty,f.px,h.offset/1000000000.0 horizon_s,q.ts quote_ts,q.bid,q.ask,q.bid_size,q.ask_size,(f.ts+h.offset-q.ts)/1000000000.0 age_s,sign(f.qty)*((q.bid+q.ask)/2-f.px)/f.px*10000 bps,(q.ask-q.bid)/f.px*5000 halfspread FROM energy_fills f HORIZON JOIN energy_quotes q ON (f.symbol=q.symbol AND f.venue=q.source) LIST (-30s,0,1s,30s,5m,30m) AS h WHERE f.ts IN '2026-11-11'), perfill AS (SELECT trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px,max(CASE WHEN horizon_s=0 THEN bps ELSE null END) b0,max(CASE WHEN horizon_s=30 THEN bps ELSE null END) b30,max(CASE WHEN horizon_s=300 THEN bps ELSE null END) b5,max(CASE WHEN horizon_s=1800 THEN bps ELSE null END) b30m,max(CASE WHEN horizon_s=0 THEN age_s ELSE null END) age0,max(CASE WHEN horizon_s=300 THEN age_s ELSE null END) age5,max(CASE WHEN horizon_s=0 THEN halfspread ELSE null END) halfspread FROM obs GROUP BY trade_id,order_id,ts,book,trader,symbol,curve,venue,passive,qty,px) SELECT f.*,b5*px*abs(qty)*u.factor/10000 usd5 FROM perfill f JOIN energy_usd_factor_asof u ON (symbol) ORDER BY usd5 LIMIT 30",
+      "name": "Fill audit | largest five-minute USD losses",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "44927a26-40f5-4d09-9604-77abaecd4070",
+      "position": 29,
+      "value": "WITH obs AS (SELECT t.trade_id,t.trade_ts,t.book,t.trader,t.symbol,t.curve,t.qty,t.px,t.channel,t.counterparty,h.offset/1000000.0 horizon_s,q.bid,q.ask FROM ((SELECT *,trade_ts AS event_ts FROM energy_trade_events WHERE version=1 AND trade_ts IN '2026-11-11' ORDER BY event_ts) timestamp(event_ts)) t HORIZON JOIN energy_quotes q ON (symbol) LIST (0,5m,30m) AS h), pertrade AS (SELECT trade_id,trade_ts,book,trader,symbol,curve,qty,px,channel,counterparty,max(CASE WHEN horizon_s=0 THEN (bid+ask)/2 ELSE null END) mid0,max(CASE WHEN horizon_s=300 THEN (bid+ask)/2 ELSE null END) mid5,max(CASE WHEN horizon_s=1800 THEN (bid+ask)/2 ELSE null END) mid30 FROM obs GROUP BY trade_id,trade_ts,book,trader,symbol,curve,qty,px,channel,counterparty), amended AS (SELECT * FROM energy_trade_events WHERE booked_ts<='2026-11-12T09:20:15' LATEST ON booked_ts PARTITION BY trade_id), graded AS (SELECT p.trade_ts,p.symbol,p.curve,p.channel,p.counterparty,p.trader,e.qty,e.px,sign(e.qty)*(p.mid0-e.px)/e.px*10000 b0,sign(e.qty)*(p.mid5-e.px)/e.px*10000 b5,sign(e.qty)*(p.mid30-e.px)/e.px*10000 b30,sign(e.qty)*(p.mid5-e.px)*abs(e.qty) pnl5,sign(e.qty)*(p.mid30-e.px)*abs(e.qty) pnl30 FROM pertrade p JOIN amended e ON (trade_id) WHERE e.status!='CANCELLED'), buckets AS (SELECT curve,timestamp_floor('1h',trade_ts) hr,sign(qty) side,sum(b5-b0) sm,count() nn FROM graded GROUP BY curve,hr,side), own AS (SELECT counterparty,curve,timestamp_floor('1h',trade_ts) hr,sign(qty) side,sum(b5-b0) sm,count() nn FROM graded GROUP BY counterparty,curve,hr,side), residual AS (SELECT g.counterparty,g.b5-g.b0-(b.sm-o.sm)/(b.nn-o.nn) excess,b.nn-o.nn peers FROM graded g JOIN buckets b ON g.curve=b.curve AND timestamp_floor('1h',g.trade_ts)=b.hr AND sign(g.qty)=b.side JOIN own o ON g.counterparty=o.counterparty AND g.curve=o.curve AND timestamp_floor('1h',g.trade_ts)=o.hr AND sign(g.qty)=o.side WHERE g.channel!='EXCH' AND b.nn-o.nn>=3), a AS (SELECT counterparty,count() matched_n,avg(excess) excess_bps,stddev_samp(excess) sd,min(peers) min_peers FROM residual GROUP BY counterparty) SELECT *,excess_bps/(sd/sqrt(matched_n)) t_excess FROM a ORDER BY excess_bps",
+      "name": "Counterparties | coarse curve/hour/side peer comparison",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "8f2ad18b-00d5-4e3c-91d3-d199413f9990",
+      "position": 30,
+      "value": "DECLARE @asof:='2026-11-11T23:59:59.999999'::timestamp WITH obs AS (SELECT t.trade_id,t.trade_ts,t.book,t.trader,t.symbol,t.curve,t.qty,t.px,t.channel,t.counterparty,h.offset/1000000.0 horizon_s,q.bid,q.ask FROM ((SELECT *,trade_ts AS event_ts FROM energy_trade_events WHERE version=1 AND trade_ts IN '2026-11-[10..11]' ORDER BY event_ts) timestamp(event_ts)) t HORIZON JOIN energy_quotes q ON (symbol) LIST (0,5m,30m) AS h), pertrade AS (SELECT trade_id,trade_ts,book,trader,symbol,curve,qty,px,channel,counterparty,max(CASE WHEN horizon_s=0 THEN (bid+ask)/2 ELSE null END) mid0,max(CASE WHEN horizon_s=300 THEN (bid+ask)/2 ELSE null END) mid5,max(CASE WHEN horizon_s=1800 THEN (bid+ask)/2 ELSE null END) mid30 FROM obs GROUP BY trade_id,trade_ts,book,trader,symbol,curve,qty,px,channel,counterparty), amended AS (SELECT * FROM energy_trade_events WHERE booked_ts<='2026-11-12T09:20:15' LATEST ON booked_ts PARTITION BY trade_id), graded AS (SELECT p.trade_ts,p.symbol,p.curve,p.channel,p.counterparty,p.trader,e.qty,e.px,sign(e.qty)*(p.mid0-e.px)/e.px*10000 b0,sign(e.qty)*(p.mid5-e.px)/e.px*10000 b5,sign(e.qty)*(p.mid30-e.px)/e.px*10000 b30,sign(e.qty)*(p.mid5-e.px)*abs(e.qty) pnl5,sign(e.qty)*(p.mid30-e.px)*abs(e.qty) pnl30 FROM pertrade p JOIN amended e ON (trade_id) WHERE e.status!='CANCELLED'), a AS (SELECT g.counterparty,count() n,avg(b0) b0,avg(b5) b5,avg(b30) b30,avg(b5-b0) move5,stddev_samp(b5-b0) sd,sum(pnl5*u.factor) usd5,sum(pnl30*u.factor) usd30 FROM graded g JOIN energy_usd_factor_asof u ON (symbol) WHERE channel!='EXCH' GROUP BY g.counterparty) SELECT *,move5/(sd/sqrt(n)) t_move FROM a WHERE counterparty IN ('UTILITY_02','UTILITY_10','UTILITY_05','TRADER_04','BANK_08') ORDER BY b5",
+      "name": "Counterparty watchlist | 10-11 November robustness",
+      "topHeight": 180,
+      "paneView": "result",
+      "autoRefresh": false,
+      "topResized": true,
+      "bottomHeight": 300,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "9f4a7519-35f8-412f-aed4-f00859967c11",
+      "position": 31,
+      "value": "WITH obs AS (SELECT f.trade_id,f.order_id,f.ts,f.book,f.trader,f.symbol,f.curve,f.venue,f.passive,f.qty,f.px,h.offset/1000000000.0 horizon_s,q.ts quote_ts,q.bid,q.ask,q.bid_size,q.ask_size,(f.ts+h.offset-q.ts)/1000000000.0 age_s,sign(f.qty)*((q.bid+q.ask)/2-f.px)/f.px*10000 bps,(q.ask-q.bid)/f.px*5000 halfspread FROM energy_fills f HORIZON JOIN energy_quotes q ON (f.symbol=q.symbol AND f.venue=q.source) LIST (-30s,0,1s,30s,5m,30m) AS h WHERE f.ts IN '2026-11-11') SELECT horizon_s,curve,avg(bps) mean_bps FROM obs GROUP BY horizon_s,curve ORDER BY horizon_s",
+      "name": "Exchange markout curves | mean bps by product",
+      "topHeight": 180,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "horizon_s",
+       "queries": [
+        {
+         "type": "line",
+         "yColumns": [
+          "mean_bps"
+         ],
+         "partitionByColumn": "curve",
+         "axis": "left"
+        }
+       ]
+      },
+      "autoRefresh": false,
+      "bottomHeight": 340,
+      "topResized": true,
+      "bottomResized": true
+     },
+     {
+      "id": "bf7b6c5f-adbf-475a-8ce3-8e0c8cb5fd25",
+      "position": 32,
+      "value": "## Findings retained from the first review\n- Gross five-minute markouts remain **+$240,324 for 2,757 exchange fills** and **+$242,267 for 250 corrected active broker/OTC trades**. These are mark-to-mid values, not realised profit, net profitability, or a causal measure of execution skill.\n- UTILITY_02 remains a six-trade watchlist name: **-$134,140 / -13.60 bps at 5m**. Its coarse matched residual t=-1.31 is inconclusive. UTILITY_10 has six active Wednesday trades: **-$15,093 at 5m**, **-$34,163 at 30m**; across 10-11 Nov it has 16 trades and a **-$67,204 five-minute markout**. The small samples do not prove that either counterparty is informed. Forty names were screened.\n- The shared 09:30 gas/power rally explains much of the gas sell-side damage. In 09:20-10:00, 16 NBP sells start close to mid, then lose **$95,216 at 5m**. Six NBP buys gain **70.67 bps** at 5m. Common market direction and trade timing should be separated from fill-price quality.\n- Champion_v1 winter monthly fair-value bias remains about **-285 bps TTF, -286 NBP and -238 UKPWR**, versus about -7/-7/-6 bps for challenger_v2. Both report input timestamps exactly **0.5 seconds old**; there is no evidence of a frozen input timestamp. This does not validate the contents of those inputs or prove which model drove orders.\n- The 30 manual TTF_Q1-27 version-1 curve marks, 08:00-08:29, exceed version 2 by **EUR 2.50/MWh**. Delivery-weighted strip replication confirms the discrepancy: the manual gap reaches 2.5012, while non-manual maximum gaps remain below 0.01 in native quote units. Version 1 consumers need attention.\n- **34 Wednesday trades** were first booked Thursday: 8 broker and 26 OTC. This is in addition to 32 Tuesday trades first booked Wednesday. Reporting by booking day and trading day answers different questions.",
+      "name": "Retained findings and counterparty caveats",
+      "type": "markdown",
+      "topResized": false
+     },
+     {
+      "id": "3e2082d4-61eb-4296-a747-0f0e27057778",
+      "position": 33,
+      "value": "## Method and limits\nPositive markout means a favourable move: sign(qty) * (future midpoint - fill price), divided by fill price for bps. Exchange benchmarks use the same venue and preserve nanosecond timestamps; broker/OTC benchmarks use the latest quote by symbol across sources. Horizons are -30s, 0, 1s, 30s, 5m and 30m. All benchmark quotes precede or equal the requested instant. Means are trade-weighted unless explicitly labelled notional-weighted. Quote-age panels and the 5s sensitivity test expose sparse/stale benchmarks.\n\nUSD amounts use physical quantities, instrument px_factor and fixed session-end FX: EURUSD 1.10761, GBPUSD 1.32753. NBP uses 0.01 because quotes are pence/therm. Do not sum physical quantities or native price gaps across different curves. Costs exclude fees/rebates and executable depth beyond the displayed top of book. Monetary markouts assume each fill is valued at the stated horizon; they do not track actual exits or realised P&L.\n\nExchange scorecards retain original energy_fills; OTC/broker quantities/prices use the latest trade event booked by **12 Nov 09:20:15 UTC**, with cancellations excluded. Inventory controls instead start from **11 Nov opening snapshots** and apply **all events booked Wednesday**, including previous-day late trades, as delta changes with previous versions reversed. Book transfers subtract the previous book's contribution and add the current one. No symbol/curve changes were found across versions. This method exactly reconciles closing book/symbol quantities to 12 Nov snapshots.\n\nThe limit table is a 12 Nov reference snapshot, with no effective-date history or exception log. A 147% comparison is therefore an exceedance of the supplied configuration, not proof of a historical policy violation. Gross venue/tenor positions show basis and funding exposure; they must not be labelled breaches of a net-quantity limit.\n\nSame-order route pairs compare actual child fills 1 microsecond apart. Their quantities differ. They show observed price differences and do not establish available alternate capacity for the whole order.\n\nAll t-statistics are descriptive, with no multiple-comparison or serial-correlation correction. Different order IDs do not guarantee independent decisions. No exchange economic-opponent identity, order decision/arrival times, cancellation logs, intended horizon, option holdings, historical limits or model-to-order linkage is available. Named counterparty and trader attribution is a review lead, not proof of causation.",
+      "name": "Method, cutoffs and limitations",
+      "type": "markdown",
+      "topResized": false
+     },
+     {
+      "id": "48e71578-fe9c-4cba-a3c6-d6bab9ecf006",
+      "position": 34,
+      "value": "## Coverage audit\n| Objects | Check and outcome |\n|---|---|\n| energy_fills, energy_trade_events | Counts, unique orders/trades, sides, prices, venue/trader segments, corrections, cancellations, booking delays and late prior-day arrivals. New matched child-fill routing audit and gasoil trader/horizon checks. |\n| energy_quotes | Same-venue horizon matches, source gaps and freshness. Three-minute EEX capture failure confirmed; other primary sources continued. |\n| energy_quotes_1m, energy_quotes_10s/5m/1d, energy_mid_1m_day | 1m used for market-shock charts. Other rollups and date-sensitive view definitions inspected in the earlier review; not independent sources or a source-level feed monitor. |\n| energy_position_snapshots, energy_limits | Opening/closing quantities reconciled across all book/symbol keys. Full Wednesday booked net-position path compared with supplied thresholds. Current snapshot date limits historical breach conclusions. |\n| energy_positions_live, energy_positions_live_by_venue, energy_positions_running_day | Definitions and dependencies reviewed. Exchange flow excludes SOD, broker/OTC, and booking-event corrections. Primary live view quantitatively compared with booked closing inventory. |\n| energy_instruments, energy_listings, energy_instrument_master, energy_tenors/asof | Currency, physical units, price factors, primary listings and tenor definitions checked. UKPWR March/October hour differences agree with 23/25-hour clock-change days; do not replace hours by 24*days. No historical master revisions supplied. |\n| energy_curve_marks, energy_curve_marks_1h, energy_marks_asof/live, energy_curve_marks_latest | Source/version and manual mark audit; latest-version treatment matters. Hour rollup/date-sensitive views inspected, not separate valuation evidence. |\n| energy_strip_gaps_day | Gas strips weighted by delivery days and power by actual delivery hours. Manual TTF Q1 gap confirmed; no additional large non-manual gap on Wednesday. Version 1 view intentionally does not apply version 2 corrections. |\n| energy_iv_marks | All version>1 rows inspected. Four +8-volatility-point March TTF ATM corrections; surrounding tenor variance checked. No option execution/P&L inferred. |\n| energy_model_prices, energy_model_graded_day | Seasonal error versus preceding-minute market bars and input timestamp age checked. No model-to-order causal attribution. |\n| energy_fx_asof, energy_usd_factor_asof | Fixed historical asof and NBP pence factor verified. Default-now calls can be empty after the loaded market window. |\n| energy_book_asof/restated, energy_trade_events_latest, energy_ledger | Definitions reviewed. Booking cutoff and trade date are distinct. Ledger includes repeated daily position snapshots plus fills; filter to the intended opening snapshot, and do not add it as another trade source. |\n| energy_settlements, energy_da_prices | Prior review checked source/range and publication timing. Settlements and 72 UK day-ahead delivery hours are not equivalent to forward execution benchmarks. No settlement-P&L reconciliation was performed. |\n| energy_lineage | Dependency/status inspection used to distinguish derived outputs from independent inputs. |\nAvailable history is 10 Nov through 12 Nov around 09:20 UTC, with later delivery hours in day-ahead prices. Historical panels have automatic refresh off. Export the tab from its menu to retain a portable copy. This workspace did not expose the original notebook, so this expanded tab restores its core scorecards and evidence alongside the new analysis.",
+      "name": "Coverage audit",
+      "type": "markdown",
+      "topResized": false
+     }
+    ],
+    "settings": {
+     "layoutMode": "grid",
+     "layout": [
+      {
+       "i": "0938c28f-f65f-4bb3-bd01-d1bf2c048562",
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 4
+      },
+      {
+       "i": "3b93d87f-be03-43cc-a6d7-55432e56a626",
+       "x": 0,
+       "y": 5,
+       "w": 12,
+       "h": 4
+      },
+      {
+       "i": "094763d0-7c22-4abf-9f55-f2a1839d717e",
+       "x": 0,
+       "y": 40,
+       "w": 6,
+       "h": 14
+      },
+      {
+       "i": "bc2845cc-5448-43c3-a3a7-a2c77695aca3",
+       "x": 6,
+       "y": 40,
+       "w": 6,
+       "h": 14
+      },
+      {
+       "i": "d099d3ff-d331-4f60-b11c-1587a27adb9a",
+       "x": 0,
+       "y": 52,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "bb3a9d81-32c1-409e-aa0c-9113b4581188",
+       "x": 0,
+       "y": 64,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "7a9373b4-566b-4d69-827e-d0c5195f9642",
+       "x": 0,
+       "y": 76,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "dffb1441-69fd-466e-9a95-d6a5a7fcdd45",
+       "x": 0,
+       "y": 88,
+       "w": 12,
+       "h": 14
+      },
+      {
+       "i": "af644a73-2524-4dc9-82e2-9d242f546cc2",
+       "x": 0,
+       "y": 100,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "780e8eff-b021-46b4-9e02-d79f8dc68640",
+       "x": 0,
+       "y": 112,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "6a110fa4-a8c9-4d44-aff0-aa512b6d54ff",
+       "x": 0,
+       "y": 124,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "8fae70f8-6694-4774-9ff4-206960f9aeba",
+       "x": 0,
+       "y": 136,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "d44ea4f2-0f63-400e-8e5d-225a22fdf24d",
+       "x": 0,
+       "y": 148,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "57d7b47d-ea5e-4b4b-b182-f63b8288bc4a",
+       "x": 0,
+       "y": 160,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "5557fe24-02f0-41a4-a6bf-1b4d71dc8651",
+       "x": 0,
+       "y": 172,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "268b27c9-c6b6-40d7-9e4e-cf3534bb6e65",
+       "x": 0,
+       "y": 184,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "083e680d-51df-4788-af70-c9d96a948702",
+       "x": 0,
+       "y": 196,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "4de424d0-8e73-4b76-8608-657f64bb8d48",
+       "x": 0,
+       "y": 208,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "98b74256-c3c7-4de3-9a85-4f3f29a2c503",
+       "x": 0,
+       "y": 220,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "6062357f-dc0c-4b0e-98f3-6bc5e8fa1a34",
+       "x": 0,
+       "y": 232,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "f4a44602-676e-4664-82a7-c09ac3050a8e",
+       "x": 0,
+       "y": 244,
+       "w": 12,
+       "h": 14
+      },
+      {
+       "i": "88cf9a04-8a22-446a-9184-e435cecc69b6",
+       "x": 0,
+       "y": 256,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "c695439f-23a8-4bdd-9f4f-a6259031dfe1",
+       "x": 0,
+       "y": 268,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "a5cde6f0-f113-4900-8dbc-25b388f5da03",
+       "x": 0,
+       "y": 280,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "cd2846ce-6a7b-499b-b998-0d77f5e4b905",
+       "x": 0,
+       "y": 292,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "9228c287-cd40-4d53-9282-af3776975cee",
+       "x": 0,
+       "y": 304,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "3268a1cc-850e-4c7c-9729-20b70bbd7e7e",
+       "x": 0,
+       "y": 316,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "8ba4a8ba-b2f7-473d-aa80-e4ec9bebc473",
+       "x": 0,
+       "y": 328,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "25d25259-01dc-44da-8618-a0951c72326f",
+       "x": 0,
+       "y": 340,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "44927a26-40f5-4d09-9604-77abaecd4070",
+       "x": 0,
+       "y": 352,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "8f2ad18b-00d5-4e3c-91d3-d199413f9990",
+       "x": 0,
+       "y": 364,
+       "w": 12,
+       "h": 9
+      },
+      {
+       "i": "9f4a7519-35f8-412f-aed4-f00859967c11",
+       "x": 0,
+       "y": 376,
+       "w": 12,
+       "h": 14
+      },
+      {
+       "i": "bf7b6c5f-adbf-475a-8ce3-8e0c8cb5fd25",
+       "x": 0,
+       "y": 388,
+       "w": 12,
+       "h": 4
+      },
+      {
+       "i": "3e2082d4-61eb-4296-a747-0f0e27057778",
+       "x": 0,
+       "y": 408,
+       "w": 12,
+       "h": 4
+      },
+      {
+       "i": "48e71578-fe9c-4cba-a3c6-d6bab9ecf006",
+       "x": 0,
+       "y": 434,
+       "w": 12,
+       "h": 4
+      }
+     ],
+     "autoRefreshDefault": false,
+     "variables": []
+    }
+   },
+   "position": 1,
+   "id": 2
+  }
+ ]
+}

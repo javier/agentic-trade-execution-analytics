@@ -1,0 +1,356 @@
+{
+ "origin": "http://eval5.localhost:19000",
+ "exported_at": "2026-11-13T11:25:35.001Z",
+ "notebooks": [
+  {
+   "label": "Execution Quality – Daily TCA",
+   "value": "",
+   "notebookViewState": {
+    "cells": [
+     {
+      "id": "30d329d3-7f25-4d35-9538-d1a6b2bb3e23",
+      "position": 0,
+      "value": "# Execution quality: daily TCA\n**How to use:** the session date is the `trade_day` notebook variable (Variables button), e.g. `'2026-11-11'` or `'$yesterday'`. **Exception:** the console does not inject notebook variables into HORIZON JOIN cells, so the markout cells start with their own `DECLARE @trade_day := '2026-11-11'` line (and `@cpty` in the drill-down). Change that first line in each of those cells as well. Refresh is off; re-run after changing a date.\n\n**Method:** markout = signed (mid − fill px) / px in bps, positive = good for us. The reference mid comes from the primary venue's quotes (CME / ICE / ICE_ENDEX; EEX is excluded because it is a secondary listing). *At fill* = spread paid (−) or earned (+). Adverse selection (\"picked off\") = markout getting worse in the **first seconds** after the fill. A loss that only shows up after minutes is market direction, not pick-off. USD values use approximate FX (GBPUSD 1.3287, EURUSD 1.107; NBP is quoted in pence per therm).\n\n**11 Nov 2026 findings:** (1) Exchange fills show no pick-off at any venue: the 5s minus at-fill drift is between −0.1 and +0.2 bp. (2) The large red trades are the **09:30–09:50 UTC gas/power repricing** (NBP, TTF and UKPWR fronts up 6–7% in a smooth 20-minute climb; Brent flat). It is a directional loss on sells, not execution. (3) The real adverse-selection signal is in **voice/broker flow with UTILITY_02**: 6 of 6 trades lost money within 5 minutes, about −$113k. (4) Not execution problems: a manual TTF Q1-27 mark ~300 bp above market (trader_11), a duplicate BANK_02 booking, a JKM 500k→50k qty correction, and OTC trades booked hours late.",
+      "type": "markdown",
+      "topHeight": 330,
+      "topResized": true
+     },
+     {
+      "id": "467d5032-b7b6-49fd-9bf1-4de70264c8c8",
+      "position": 1,
+      "value": "DECLARE @trade_day := '2026-11-11'\nWITH mk AS (\nSELECT f.trade_id, f.venue, f.passive, f.fct, f.qty, f.px,\n avg(CASE WHEN h.offset=0 THEN 10000*sign(f.qty)*(mid(q.bid,q.ask)-f.px)/f.px END) m0,\n avg(CASE WHEN h.offset=1000000000 THEN 10000*sign(f.qty)*(mid(q.bid,q.ask)-f.px)/f.px END) m1s,\n avg(CASE WHEN h.offset=5000000000 THEN 10000*sign(f.qty)*(mid(q.bid,q.ask)-f.px)/f.px END) m5s,\n avg(CASE WHEN h.offset=60000000000 THEN 10000*sign(f.qty)*(mid(q.bid,q.ask)-f.px)/f.px END) m1m,\n avg(CASE WHEN h.offset=300000000000 THEN 10000*sign(f.qty)*(mid(q.bid,q.ask)-f.px)/f.px END) m5m,\n avg(CASE WHEN h.offset=0 THEN f.qty*(mid(q.bid,q.ask)-f.px)*f.fct END) usd0,\n avg(CASE WHEN h.offset=300000000000 THEN f.qty*(mid(q.bid,q.ask)-f.px)*f.fct END) usd5m\nFROM (SELECT ts, trade_id, venue, passive, qty, px, symbol,\n   CASE curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'UKA' THEN 1.3287 WHEN 'TTF' THEN 1.107 WHEN 'EUA' THEN 1.107 ELSE 1.0 END fct\n   FROM energy_fills WHERE ts IN @trade_day) f\nHORIZON JOIN (energy_quotes WHERE source IN ('CME','ICE','ICE_ENDEX')) q ON (f.symbol = q.symbol)\nLIST (0, 1s, 5s, 1m, 5m) AS h\nGROUP BY f.trade_id, f.venue, f.passive, f.fct, f.qty, f.px)\nSELECT venue, CASE WHEN passive THEN 'passive' ELSE 'aggressive' END AS side_type, count() fills,\n round(sum(abs(qty*px*fct))/1e6, 1) notional_musd,\n round(avg(m0),2) bps_at_fill, round(avg(m1s),2) bps_1s, round(avg(m5s),2) bps_5s, round(avg(m1m),2) bps_1m, round(avg(m5m),2) bps_5m,\n round(avg(m5s-m0),2) adverse_5s, round(sum(usd0)) usd_at_fill, round(sum(usd5m)) usd_5m\nFROM mk GROUP BY venue, side_type ORDER BY venue, side_type",
+      "name": "Exchange fills: markout ladder by venue and passive/aggressive (bps, USD)",
+      "topHeight": 512,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "61be3d7b-26e2-45c4-a58e-ba72817256d5",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "adverse_5s"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": -1
+         }
+        },
+        {
+         "id": "d9acf770-8b95-4b80-8afc-41f3a3bfbb93",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "usd_5m"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": 0
+         }
+        },
+        {
+         "id": "396495fd-4296-4875-bddb-7b9e8da3c195",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "usd_5m"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataPositive",
+         "condition": {
+          "op": "gte",
+          "value": 0
+         }
+        }
+       ]
+      },
+      "bottomHeight": 330,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "9e58a463-627d-45bf-af5a-13106a2e6507",
+      "position": 2,
+      "value": "DECLARE @trade_day := '2026-11-11'\nSELECT h.offset / 1000000000.0 AS horizon_s, f.venue || CASE WHEN f.passive THEN ' passive' ELSE ' aggressive' END AS bucket,\n avg(10000*sign(f.qty)*(mid(q.bid,q.ask)-f.px)/f.px) AS markout_bps\nFROM (energy_fills WHERE ts IN @trade_day) f\nHORIZON JOIN (energy_quotes WHERE source IN ('CME','ICE','ICE_ENDEX')) q ON (f.symbol = q.symbol)\nLIST (-30s, -10s, -5s, -1s, 0, 1s, 5s, 10s, 30s, 1m, 2m, 5m) AS h\nGROUP BY horizon_s, bucket ORDER BY horizon_s, bucket",
+      "name": "Markout curve: −30s … +5m around exchange fills (bps)",
+      "topHeight": 176,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "horizon_s",
+       "queries": [
+        {
+         "type": "line",
+         "yColumns": [
+          "markout_bps"
+         ],
+         "partitionByColumn": "bucket",
+         "name": "Markout bps"
+        }
+       ]
+      },
+      "bottomHeight": 380,
+      "bottomResized": true
+     },
+     {
+      "id": "539e672a-9c96-44dd-b5c6-2d27530af3e2",
+      "position": 3,
+      "value": "WITH b AS (SELECT ts, symbol, close FROM energy_quotes_1m WHERE ts IN @trade_day AND symbol IN ('NBP_Dec-26','TTF_Jan-27','UKPWR_Jan-27','BRENT_Jan-27','EUA_Dec-26')),\no AS (SELECT symbol, first(close) open_px FROM b GROUP BY symbol)\nSELECT b.ts, b.symbol, round(100 * (b.close / o.open_px - 1), 3) AS pct_from_open FROM b JOIN o ON b.symbol = o.symbol ORDER BY b.ts",
+      "name": "Front-month moves, % from session open (1m mid)",
+      "topHeight": 80,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "ts",
+       "queries": [
+        {
+         "type": "line",
+         "yColumns": [
+          "pct_from_open"
+         ],
+         "partitionByColumn": "symbol",
+         "name": "% from open"
+        }
+       ]
+      },
+      "bottomHeight": 380,
+      "bottomResized": true
+     },
+     {
+      "id": "56c5be40-0e21-4ea7-a620-027006b91961",
+      "position": 4,
+      "value": "DECLARE @trade_day := '2026-11-11'\nWITH mk AS (\nSELECT f.trade_id, f.ts, f.curve, f.fct, f.qty, f.px,\n avg(CASE WHEN h.offset=0 THEN f.qty*(mid(q.bid,q.ask)-f.px)*f.fct END) usd0,\n avg(CASE WHEN h.offset=300000000000 THEN f.qty*(mid(q.bid,q.ask)-f.px)*f.fct END) usd5m\nFROM (SELECT ts, trade_id, curve, qty, px, symbol,\n   CASE curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'UKA' THEN 1.3287 WHEN 'TTF' THEN 1.107 WHEN 'EUA' THEN 1.107 ELSE 1.0 END fct\n   FROM energy_fills WHERE ts IN @trade_day) f\nHORIZON JOIN (energy_quotes WHERE source IN ('CME','ICE','ICE_ENDEX')) q ON (f.symbol = q.symbol)\nLIST (0, 5m) AS h\nGROUP BY f.trade_id, f.ts, f.curve, f.fct, f.qty, f.px)\nSELECT timestamp_floor('1h', ts::timestamp) AS hour, curve, round(sum(usd5m - usd0)) AS usd_post_trade_5m\nFROM mk GROUP BY hour, curve ORDER BY hour, curve",
+      "name": "Post-trade P&L (USD, 5m markout minus at-fill) by hour and curve",
+      "topHeight": 320,
+      "paneView": "result",
+      "mode": "draw",
+      "chartConfig": {
+       "xColumn": "hour",
+       "queries": [
+        {
+         "type": "stackedBar",
+         "yColumns": [
+          "usd_post_trade_5m"
+         ],
+         "partitionByColumn": "curve",
+         "name": "USD"
+        }
+       ]
+      },
+      "bottomHeight": 380,
+      "bottomResized": true
+     },
+     {
+      "id": "3b8d11fd-a569-4432-8e4a-06ab17702a46",
+      "position": 5,
+      "value": "DECLARE @trade_day := '2026-11-11'\nWITH l AS (SELECT * FROM energy_trade_events WHERE channel != 'EXCH' LATEST ON booked_ts PARTITION BY trade_id),\ne AS ((SELECT trade_ts, trade_id, symbol, curve, qty, px, channel, counterparty,\n   CASE curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'UKA' THEN 1.3287 WHEN 'TTF' THEN 1.107 WHEN 'EUA' THEN 1.107 ELSE 1.0 END fct\n   FROM l WHERE status != 'CANCELLED' AND trade_ts IN @trade_day ORDER BY trade_ts) timestamp(trade_ts)),\nmk AS (\nSELECT e.trade_id, e.counterparty, e.qty, e.px, e.fct,\n avg(CASE WHEN h.offset=0 THEN 10000*sign(e.qty)*(mid(q.bid,q.ask)-e.px)/e.px END) b0,\n avg(CASE WHEN h.offset=60000000 THEN 10000*sign(e.qty)*(mid(q.bid,q.ask)-e.px)/e.px END) b1m,\n avg(CASE WHEN h.offset=300000000 THEN 10000*sign(e.qty)*(mid(q.bid,q.ask)-e.px)/e.px END) b5m,\n avg(CASE WHEN h.offset=300000000 THEN e.qty*(mid(q.bid,q.ask)-e.px)*e.fct END) usd5m\nFROM e HORIZON JOIN (energy_quotes WHERE source IN ('CME','ICE','ICE_ENDEX')) q ON (e.symbol = q.symbol)\nLIST (0, 1m, 5m) AS h\nGROUP BY e.trade_id, e.counterparty, e.qty, e.px, e.fct)\nSELECT counterparty, count() trades, sum(CASE WHEN b5m < 0 THEN 1 ELSE 0 END) losers_5m,\n round(sum(abs(qty*px*fct))/1e6,1) notional_musd, round(avg(b0),2) bps_at_trade, round(avg(b1m),2) bps_1m, round(avg(b5m),2) bps_5m, round(sum(usd5m)) usd_5m\nFROM mk GROUP BY counterparty ORDER BY usd_5m",
+      "name": "OTC + broker counterparty scorecard (latest version, cancels excluded)",
+      "topHeight": 416,
+      "paneView": "result",
+      "highlightConfig": {
+       "identityColumns": [],
+       "rules": [
+        {
+         "id": "dff8864a-9720-4561-96ff-f9730cc115c5",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "usd_5m"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": -25000
+         }
+        },
+        {
+         "id": "989edc64-02b2-4904-8a15-975c658652a0",
+         "enabled": true,
+         "target": {
+          "kind": "column",
+          "name": "bps_5m"
+         },
+         "kind": "value",
+         "appliesTo": "cell",
+         "display": "always",
+         "color": "dataNegative",
+         "condition": {
+          "op": "lt",
+          "value": -5
+         }
+        }
+       ]
+      },
+      "bottomHeight": 420,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "9ead2f8a-0a44-41d4-87d7-164036c8c1a5",
+      "position": 6,
+      "value": "DECLARE @trade_day := '2026-11-11', @cpty := 'UTILITY_02'\nWITH l AS (SELECT * FROM energy_trade_events WHERE channel != 'EXCH' LATEST ON booked_ts PARTITION BY trade_id),\ne AS ((SELECT trade_ts, trade_id, symbol, curve, qty, px, channel, counterparty, trader,\n   datediff('m', trade_ts, booked_ts) booking_lag_min,\n   CASE curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'UKA' THEN 1.3287 WHEN 'TTF' THEN 1.107 WHEN 'EUA' THEN 1.107 ELSE 1.0 END fct\n   FROM l WHERE status != 'CANCELLED' AND trade_ts IN @trade_day AND counterparty = @cpty ORDER BY trade_ts) timestamp(trade_ts))\nSELECT e.trade_ts, e.channel, e.trader, e.symbol, e.qty, e.px, e.booking_lag_min,\n round(avg(CASE WHEN h.offset=0 THEN 10000*sign(e.qty)*(mid(q.bid,q.ask)-e.px)/e.px END),2) bps_at_trade,\n round(avg(CASE WHEN h.offset=60000000 THEN 10000*sign(e.qty)*(mid(q.bid,q.ask)-e.px)/e.px END),2) bps_1m,\n round(avg(CASE WHEN h.offset=300000000 THEN 10000*sign(e.qty)*(mid(q.bid,q.ask)-e.px)/e.px END),2) bps_5m,\n round(avg(CASE WHEN h.offset=300000000 THEN e.qty*(mid(q.bid,q.ask)-e.px)*e.fct END)) usd_5m\nFROM e HORIZON JOIN (energy_quotes WHERE source IN ('CME','ICE','ICE_ENDEX')) q ON (e.symbol = q.symbol)\nLIST (0, 1m, 5m) AS h\nGROUP BY e.trade_ts, e.channel, e.trader, e.symbol, e.qty, e.px, e.booking_lag_min ORDER BY e.trade_ts",
+      "name": "Counterparty drill-down: trades with @cpty",
+      "topHeight": 344,
+      "paneView": "result",
+      "bottomHeight": 420,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "08f8a80f-2cbb-421f-853e-6b545291ce18",
+      "position": 7,
+      "value": "DECLARE @trade_day := '2026-11-11'\nWITH mk AS (\nSELECT f.ts, f.trader, f.symbol, f.venue, f.passive, f.qty, f.px, f.fct,\n avg(CASE WHEN h.offset=0 THEN 10000*sign(f.qty)*(mid(q.bid,q.ask)-f.px)/f.px END) bps_at_fill,\n avg(CASE WHEN h.offset=5000000000 THEN 10000*sign(f.qty)*(mid(q.bid,q.ask)-f.px)/f.px END) bps_5s,\n avg(CASE WHEN h.offset=300000000000 THEN 10000*sign(f.qty)*(mid(q.bid,q.ask)-f.px)/f.px END) bps_5m,\n avg(CASE WHEN h.offset=300000000000 THEN f.qty*(mid(q.bid,q.ask)-f.px)*f.fct END) usd_5m\nFROM (SELECT ts, trader, venue, passive, qty, px, symbol,\n   CASE curve WHEN 'NBP' THEN 0.013287 WHEN 'UKPWR' THEN 1.3287 WHEN 'UKA' THEN 1.3287 WHEN 'TTF' THEN 1.107 WHEN 'EUA' THEN 1.107 ELSE 1.0 END fct\n   FROM energy_fills WHERE ts IN @trade_day) f\nHORIZON JOIN (energy_quotes WHERE source IN ('CME','ICE','ICE_ENDEX')) q ON (f.symbol = q.symbol)\nLIST (0, 5s, 5m) AS h\nGROUP BY f.ts, f.trader, f.symbol, f.venue, f.passive, f.qty, f.px, f.fct)\nSELECT ts, trader, symbol, venue, passive, qty, px, round(bps_at_fill,2) bps_at_fill, round(bps_5s,2) bps_5s, round(bps_5m,2) bps_5m, round(usd_5m) usd_5m\nFROM mk ORDER BY usd_5m LIMIT 25",
+      "name": "Worst 25 exchange fills by 5m USD markout",
+      "topHeight": 368,
+      "paneView": "result",
+      "bottomHeight": 420,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "fce17db3-1b6b-4a66-8a76-21cd25c1bad6",
+      "position": 8,
+      "value": "SELECT e.booked_ts, e.status, e.reason, e.channel, e.counterparty, e.trader, e.booked_by, e.symbol, e.trade_ts, o.qty AS orig_qty, e.qty, o.px AS orig_px, e.px, o.booked_ts AS orig_booked_ts\nFROM energy_trade_events e JOIN energy_trade_events o ON o.trade_id = e.trade_id AND o.version = 1\nWHERE e.version > 1 AND e.trade_ts IN @trade_day ORDER BY e.booked_ts",
+      "name": "Not execution: amendments and cancellations",
+      "topHeight": 80,
+      "paneView": "result",
+      "bottomHeight": 360,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "e18f7f2c-0816-4793-945d-8224865f0937",
+      "position": 9,
+      "value": "SELECT channel, count() trades, round(avg(datediff('s', trade_ts, booked_ts))/60.0, 1) avg_lag_min, round(max(datediff('s', trade_ts, booked_ts))/60.0, 1) max_lag_min,\n sum(CASE WHEN datediff('s', trade_ts, booked_ts) > 3600 THEN 1 ELSE 0 END) booked_over_1h_late\nFROM energy_trade_events WHERE version = 1 AND trade_ts IN @trade_day GROUP BY channel",
+      "name": "Not execution: booking latency by channel",
+      "topHeight": 80,
+      "paneView": "result",
+      "bottomHeight": 160,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     },
+     {
+      "id": "9040b972-10f0-481a-ae76-2b24606960d9",
+      "position": 10,
+      "value": "WITH mm AS (SELECT ts, symbol, marked_by, price FROM energy_curve_marks WHERE ts IN @trade_day AND source = 'MANUAL')\nSELECT mm.symbol, mm.marked_by, min(mm.ts) first_mark, max(mm.ts) last_mark, count() minutes,\n round(avg(mm.price),3) avg_manual_mark, round(avg(b.close),3) avg_market_mid, round(avg(10000*(mm.price - b.close)/b.close),1) avg_gap_bps\nFROM mm LEFT JOIN energy_quotes_1m b ON b.symbol = mm.symbol AND b.ts = mm.ts\nGROUP BY mm.symbol, mm.marked_by",
+      "name": "Not execution: manual curve marks vs market mid",
+      "topHeight": 128,
+      "paneView": "result",
+      "bottomHeight": 160,
+      "bottomResized": true,
+      "lastRunStatus": "success"
+     }
+    ],
+    "settings": {
+     "layoutMode": "grid",
+     "layout": [
+      {
+       "i": "30d329d3-7f25-4d35-9538-d1a6b2bb3e23",
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 14
+      },
+      {
+       "i": "467d5032-b7b6-49fd-9bf1-4de70264c8c8",
+       "x": 0,
+       "y": 1,
+       "w": 12,
+       "h": 19
+      },
+      {
+       "i": "9e58a463-627d-45bf-af5a-13106a2e6507",
+       "x": 0,
+       "y": 2,
+       "w": 6,
+       "h": 15
+      },
+      {
+       "i": "539e672a-9c96-44dd-b5c6-2d27530af3e2",
+       "x": 6,
+       "y": 2,
+       "w": 6,
+       "h": 15
+      },
+      {
+       "i": "56c5be40-0e21-4ea7-a620-027006b91961",
+       "x": 0,
+       "y": 3,
+       "w": 12,
+       "h": 15
+      },
+      {
+       "i": "3b8d11fd-a569-4432-8e4a-06ab17702a46",
+       "x": 0,
+       "y": 4,
+       "w": 7,
+       "h": 16
+      },
+      {
+       "i": "9ead2f8a-0a44-41d4-87d7-164036c8c1a5",
+       "x": 7,
+       "y": 4,
+       "w": 5,
+       "h": 13
+      },
+      {
+       "i": "08f8a80f-2cbb-421f-853e-6b545291ce18",
+       "x": 0,
+       "y": 5,
+       "w": 12,
+       "h": 14
+      },
+      {
+       "i": "fce17db3-1b6b-4a66-8a76-21cd25c1bad6",
+       "x": 0,
+       "y": 6,
+       "w": 12,
+       "h": 5
+      },
+      {
+       "i": "e18f7f2c-0816-4793-945d-8224865f0937",
+       "x": 0,
+       "y": 7,
+       "w": 6,
+       "h": 5
+      },
+      {
+       "i": "9040b972-10f0-481a-ae76-2b24606960d9",
+       "x": 6,
+       "y": 7,
+       "w": 6,
+       "h": 7
+      }
+     ],
+     "autoRefreshDefault": false,
+     "variables": [
+      {
+       "name": "trade_day",
+       "value": "'2026-11-11'"
+      },
+      {
+       "name": "cpty",
+       "value": "'UTILITY_02'"
+      }
+     ]
+    }
+   },
+   "position": 1,
+   "id": 2
+  }
+ ]
+}
