@@ -1,0 +1,1 @@
+Before you finish: list every table and view in the database and what you checked in each. Then investigate anything you haven't checked yet, add what you find to the dashboard, and give me a revised summary that ends with that coverage list.

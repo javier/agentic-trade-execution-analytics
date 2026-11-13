@@ -1,0 +1,2 @@
+{"mcpServers": {"questdb": {"command": "npx", "args": ["-y", "@questdb/mcp-server-questdb@0.5.0"],
+  "env": {"CONSOLE_ORIGIN": "http://final2-cov.localhost:19000", "LOG_PATH": "/tmp/questdb-mcp-bridge/final2-cov-transcript.log"}}}}
