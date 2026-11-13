@@ -1,0 +1,66 @@
+{
+ "query": "SELECT * FROM energy_demo_events ORDER BY 1",
+ "columns": [
+  {
+   "name": "ts",
+   "type": "TIMESTAMP"
+  },
+  {
+   "name": "act",
+   "type": "SYMBOL"
+  },
+  {
+   "name": "what",
+   "type": "VARCHAR"
+  }
+ ],
+ "timestamp": 0,
+ "dataset": [
+  [
+   "2026-11-09T01:00:00.000000Z",
+   "3_vol",
+   "Windy night: UK day-ahead hours 01:00 to 05:00 on 2026-11-09 clear negative"
+  ],
+  [
+   "2026-11-11T07:00:00.000000Z",
+   "2_exposure",
+   "CRUDE buys BRENT_Jan-27 to about 3.0M bbl against a 2.0M limit, unwinds to 0.4M by 10:00 UTC"
+  ],
+  [
+   "2026-11-11T07:30:00.000000Z",
+   "6_recon",
+   "UK_POWER sells 100 MW UKPWR_Win-27 by voice (OTC), booked 3h45m late at 11:15 UTC"
+  ],
+  [
+   "2026-11-11T08:00:00.000000Z",
+   "4_curves",
+   "Manual mark on TTF_Q1-27 +2.50 EUR above its months (trader_11), corrected (version 2) at 08:30 UTC"
+  ],
+  [
+   "2026-11-11T08:45:00.000000Z",
+   "7_models",
+   "3-minute outage of the EEX quote feed: EEX-listed TTF, EUA and UK power go dark, ICE keeps ticking and the curve marks stay MARKET"
+  ],
+  [
+   "2026-11-11T09:00:00.000000Z",
+   "6_recon",
+   "LNG fill in JKM_Dec-26 booked with 10x quantity by STP, amended (QTY_CORRECTION) at 10:45 UTC"
+  ],
+  [
+   "2026-11-11T09:15:00.000000Z",
+   "6_recon",
+   "EU_GAS TTF_Q1-27 broker trade booked twice; duplicate cancelled at 11:00 UTC"
+  ],
+  [
+   "2026-11-11T09:30:00.000000Z",
+   "7_models",
+   "Cold-snap forecast: Nov to Feb gas and power premium steps up 8% over 20 minutes. champion_v1 does not adapt, challenger_v2 refits on the hour"
+  ],
+  [
+   "2026-11-11T10:30:00.000000Z",
+   "7_models",
+   "Bad ATM vol mark on TTF_Mar-27 (-8 points) breaks calendar no-arbitrage, corrected (version 2) at 10:50 UTC"
+  ]
+ ],
+ "count": 9
+}
