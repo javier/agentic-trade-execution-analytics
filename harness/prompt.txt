@@ -1,0 +1,5 @@
+I run an energy trading desk. Our QuestDB instance holds our trading activity and the market data for the last few days.
+
+I want to know how well we executed during yesterday's session, Wednesday 11 November 2026. Are we getting picked off, and if so where, by whom, and how badly? If something looks wrong but isn't really an execution-quality problem, tell me what it is instead.
+
+Leave me a dashboard in the QuestDB Web Console that I can reopen tomorrow, and finish with a short written summary of what you found, with the evidence for each point.

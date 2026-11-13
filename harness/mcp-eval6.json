@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "questdb": {
+      "command": "npx",
+      "args": ["-y", "@questdb/mcp-server-questdb@0.5.0"],
+      "env": {
+        "CONSOLE_ORIGIN": "http://eval6.localhost:19000",
+        "LOG_PATH": "/tmp/questdb-mcp-bridge/bridge6.log"
+      }
+    }
+  }
+}
