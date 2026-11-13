@@ -6,7 +6,7 @@ markouts, investigate outliers, leave a reproducible notebook or dashboard),
 scored on correctness, completion, interventions and setup effort.
 
 The write-up is the blog post
-[Agentic trade execution analysis on QuestDB: what agents find and miss](https://questdb.com/blog/agentic-trade-execution-analysis-questdb/),
+[Agentic trade execution analysis: markouts, TCA and what agents find](https://questdb.com/blog/agentic-trade-execution-analysis-markouts-tca/),
 which walks through the astra1 run.
 
 ## Environment

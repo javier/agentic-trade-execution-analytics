@@ -1,7 +1,7 @@
 # Agentic trade execution analysis: eval archive
 
 Everything from the agent eval behind the blog post
-[Agentic trade execution analysis on QuestDB: what agents find and miss](https://questdb.com/blog/agentic-trade-execution-analysis-questdb/).
+[Agentic trade execution analysis: markouts, TCA and what agents find](https://questdb.com/blog/agentic-trade-execution-analysis-markouts-tca/).
 
 Start with `NOTES.md`: setup, ground truth, every run's scorecard, the
 follow-up experiment.
